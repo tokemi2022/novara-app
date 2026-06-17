@@ -100,8 +100,8 @@ async function startOnboarding() {
     const geo = await r.json();
     const city = geo.address.city || geo.address.town || geo.address.village || '';
     const country = geo.address.country || '';
-    const countryCode = geo.address.country_code?.toUpperCase() || '';
-    onboardData.location = { city, country, countryCode, latitude, longitude };
+    const country_code = geo.address.country_code?.toUpperCase() || '';
+    onboardData.location = { city, country, country_code, latitude, longitude };
     document.getElementById('location-status').textContent = `📍 ${city}, ${country}`;
     document.getElementById('location-confirm').style.display = 'block';
     document.getElementById('location-manual').style.display = 'none';
@@ -120,7 +120,7 @@ function saveManualLocation() {
   const city = document.getElementById('manual-city').value.trim();
   const country = document.getElementById('manual-country').value.trim();
   if (!city || !country) { alert('Please enter your city and country'); return; }
-  onboardData.location = { city, country, countryCode: '', latitude: null, longitude: null };
+  onboardData.location = { city, country, country_code: '', latitude: null, longitude: null };
   showScreen('onboard-child');
 }
 
