@@ -139,6 +139,7 @@ function saveChildDetails() {
   // Update child name display
   document.getElementById('onboard-child-display').textContent = name;
   showScreen('onboard-languages');
+  renderLanguagePicker();
 }
 
 // Language selection
