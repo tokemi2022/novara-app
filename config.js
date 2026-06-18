@@ -1,11 +1,18 @@
 // ===== NOVARA CONFIG =====
 const NOVARA = {
-  version: '1.0.0',
+  version: '2.0.0',
   name: 'Novara',
   tagline: 'Every child is a universe',
   supabaseUrl: 'https://exobpnfsjnacjbbjqwhp.supabase.co',
   supabaseKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV4b2JwbmZzam5hY2piYmpxd2hwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE2NTIyNzcsImV4cCI6MjA5NzIyODI3N30.6wynyR40mt9iCBgOPitYqwzA9e64HZyzzpdyomO7bS4',
   workerUrl: 'https://nessa-api-proxy.tokemi2022.workers.dev/',
+
+  // ── Trial configuration ──────────────────────────────────────────────────
+  trialDays: 14, // Number of free trial days from account creation
+
+  // ── Device limit ─────────────────────────────────────────────────────────
+  maxDevices: 2,
+
   colors: {
     primary: '#0E7490',
     deep: '#0A2540',
@@ -64,4 +71,5 @@ const db = {
     const text = await res.text();
     return text ? JSON.parse(text) : null;
   },
+  async delete(table, filter) { return this.query(table, 'DELETE', null, filter); },
 };

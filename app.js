@@ -1,5 +1,5 @@
 // ===== SESSION STATE =====
-const SESSION_KEY = 'novara_session_v1';
+const SESSION_KEY = 'novara_session_v2';
 let session = {
   familyId: null,
   childId: null,
@@ -13,6 +13,9 @@ let session = {
   plan: [],
   weekNumber: 1,
   ageMonths: 0,
+  trialStartDate: null,
+  isPaid: false,
+  availability: null,
 };
 
 function saveSession() {
@@ -27,6 +30,109 @@ function loadSession() {
     const s = localStorage.getItem(SESSION_KEY);
     if (s) session = { ...session, ...JSON.parse(s), pinVerified: false };
   } catch(e) {}
+}
+
+// ===== DEVICE MANAGEMENT =====
+// Each device gets a stable UUID stored in localStorage
+function getOrCreateDeviceId() {
+  let id = localStorage.getItem('novara_device_id');
+  if (!id) {
+    id = 'dev_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);
+    localStorage.setItem('novara_device_id', id);
+  }
+  return id;
+}
+
+async function registerDevice(familyId) {
+  const deviceId = getOrCreateDeviceId();
+  const deviceName = getDeviceName();
+  // Check existing registered devices for this family
+  const existing = await db.select('registered_devices', `?family_id=eq.${familyId}`);
+  // Is this device already registered?
+  const alreadyRegistered = existing?.find(d => d.device_id === deviceId);
+  if (alreadyRegistered) {
+    // Update last seen
+    await db.update('registered_devices', { last_seen_at: new Date().toISOString() }, `?family_id=eq.${familyId}&device_id=eq.${deviceId}`);
+    return { allowed: true };
+  }
+  // New device — check limit
+  if (existing && existing.length >= NOVARA.maxDevices) {
+    return { allowed: false, devices: existing };
+  }
+  // Register new device
+  await db.insert('registered_devices', { family_id: familyId, device_id: deviceId, device_name: deviceName });
+  return { allowed: true };
+}
+
+function getDeviceName() {
+  const ua = navigator.userAgent;
+  if (/iPhone/.test(ua)) return 'iPhone';
+  if (/iPad/.test(ua)) return 'iPad';
+  if (/Android/.test(ua)) return 'Android device';
+  if (/Mac/.test(ua)) return 'Mac';
+  if (/Windows/.test(ua)) return 'Windows PC';
+  return 'Browser';
+}
+
+async function resetDevice(familyId) {
+  const deviceId = getOrCreateDeviceId();
+  await db.delete('registered_devices', `?family_id=eq.${familyId}&device_id=eq.${deviceId}`);
+  localStorage.removeItem('novara_device_id');
+}
+
+// ===== TRIAL HELPERS =====
+function getTrialDaysRemaining() {
+  if (session.isPaid) return Infinity;
+  if (!session.trialStartDate) return NOVARA.trialDays;
+  const start = new Date(session.trialStartDate);
+  const now = new Date();
+  const daysPassed = Math.floor((now - start) / 86400000);
+  return Math.max(0, NOVARA.trialDays - daysPassed);
+}
+
+function isTrialActive() {
+  return session.isPaid || getTrialDaysRemaining() > 0;
+}
+
+function renderTrialBanner() {
+  const existing = document.getElementById('trial-banner');
+  if (existing) existing.remove();
+  if (session.isPaid) return;
+  const days = getTrialDaysRemaining();
+  if (days <= 0) {
+    // Trial expired — show blocking overlay instead
+    showTrialExpiredOverlay();
+    return;
+  }
+  // Show countdown banner on active screens
+  const screens = ['screen-home','screen-plan','screen-progress','screen-moments','screen-settings'];
+  screens.forEach(sid => {
+    const sc = document.getElementById(sid);
+    if (!sc) return;
+    const banner = document.createElement('div');
+    banner.id = 'trial-banner';
+    banner.className = 'trial-banner';
+    banner.innerHTML = days <= 3
+      ? `<i class="ti ti-clock-exclamation"></i> <strong>${days} day${days !== 1 ? 's' : ''} left</strong> in your Novara trial — upgrade to keep your journey going.`
+      : `<i class="ti ti-sparkles"></i> ${days} days remaining in your free trial.`;
+    sc.insertBefore(banner, sc.querySelector('.scroll-area') || sc.firstChild);
+  });
+}
+
+function showTrialExpiredOverlay() {
+  if (document.getElementById('trial-expired-overlay')) return;
+  const overlay = document.createElement('div');
+  overlay.id = 'trial-expired-overlay';
+  overlay.className = 'trial-expired-overlay';
+  overlay.innerHTML = `
+    <div class="trial-expired-card">
+      <div style="font-size:48px">🌊</div>
+      <h2>Your trial has ended</h2>
+      <p>Thank you for exploring Novara. Upgrade to continue your child's journey and keep all your milestones and memories safe.</p>
+      <button class="btn-primary full-width" onclick="alert('Upgrade flow coming soon!')"><i class="ti ti-crown"></i> Upgrade Novara</button>
+      <p style="font-size:12px;color:var(--color-text-secondary);margin-top:12px">Your data is safe and will be restored when you upgrade.</p>
+    </div>`;
+  document.getElementById('app').appendChild(overlay);
 }
 
 // ===== WEEK CALCULATION =====
@@ -45,7 +151,7 @@ function computeWeek(startDate, dob) {
 async function initApp() {
   loadSession();
   showScreen('splash');
-  setTimeout(() => {
+  setTimeout(async () => {
     if (!session.familyId) {
       showScreen('onboard-welcome');
     } else if (!session.pinVerified) {
@@ -68,10 +174,13 @@ function showScreen(id) {
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   const nb = document.querySelector(`[data-screen="${id}"]`);
   if (nb) nb.classList.add('active');
-  if (id === 'home') renderHome();
+  if (id === 'home') { renderHome(); renderTrialBanner(); }
+  if (id === 'plan') renderPlan();
   if (id === 'progress') renderProgress();
   if (id === 'moments') renderMoments();
   if (id === 'settings') renderSettings();
+  if (id === 'chat') renderChat();
+  if (id === 'shopping') renderShoppingList();
 }
 
 // ===== ONBOARDING =====
@@ -85,17 +194,14 @@ let onboardData = {
   pin: '',
 };
 
-// Step 1: Welcome → auto-detect location
 async function startOnboarding() {
   showScreen('onboard-location');
   document.getElementById('location-status').textContent = 'Detecting your location…';
   try {
-    // Try browser geolocation
     const pos = await new Promise((res, rej) =>
       navigator.geolocation.getCurrentPosition(res, rej, { timeout: 8000 })
     );
     const { latitude, longitude } = pos.coords;
-    // Reverse geocode with open API
     const r = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`);
     const geo = await r.json();
     const city = geo.address.city || geo.address.town || geo.address.village || '';
@@ -112,9 +218,7 @@ async function startOnboarding() {
   }
 }
 
-function confirmLocation() {
-  showScreen('onboard-child');
-}
+function confirmLocation() { showScreen('onboard-child'); }
 
 function saveManualLocation() {
   const city = document.getElementById('manual-city').value.trim();
@@ -136,13 +240,11 @@ function saveChildDetails() {
   if (ageMonths > 48) { alert('Novara currently supports children up to 48 months (4 years)'); return; }
   onboardData.childName = name;
   onboardData.dob = dob;
-  // Update child name display
   document.getElementById('onboard-child-display').textContent = name;
   showScreen('onboard-languages');
   renderLanguagePicker();
 }
 
-// Language selection
 const WORLD_LANGUAGES = [
   'English','Spanish','French','German','Portuguese','Mandarin','Arabic','Hindi',
   'Yoruba','Igbo','Hausa','Swahili','Amharic','Zulu','Catalan','Italian',
@@ -154,30 +256,20 @@ function renderLanguagePicker() {
   const home = document.getElementById('lang-home-list');
   const school = document.getElementById('lang-school-list');
   if (!home || !school) return;
-  const pills = WORLD_LANGUAGES.map(lang => {
+  home.innerHTML = WORLD_LANGUAGES.map(lang => {
     const isHome = onboardData.languages.find(l => l.language === lang && l.context === 'home');
-    const isSchool = onboardData.languages.find(l => l.language === lang && l.context === 'school');
-    return `
-      <button class="lang-select-btn ${isHome ? 'selected-home' : ''}" onclick="toggleLang('${lang}','home')">${lang}</button>
-    `;
+    return `<button class="lang-select-btn ${isHome ? 'selected-home' : ''}" onclick="toggleLang('${lang}','home')">${lang}</button>`;
   }).join('');
-  const schoolPills = WORLD_LANGUAGES.map(lang => {
+  school.innerHTML = WORLD_LANGUAGES.map(lang => {
     const isSchool = onboardData.languages.find(l => l.language === lang && l.context === 'school');
-    return `
-      <button class="lang-select-btn ${isSchool ? 'selected-school' : ''}" onclick="toggleLang('${lang}','school')">${lang}</button>
-    `;
+    return `<button class="lang-select-btn ${isSchool ? 'selected-school' : ''}" onclick="toggleLang('${lang}','school')">${lang}</button>`;
   }).join('');
-  home.innerHTML = pills;
-  school.innerHTML = schoolPills;
 }
 
 function toggleLang(lang, context) {
   const existing = onboardData.languages.findIndex(l => l.language === lang && l.context === context);
-  if (existing >= 0) {
-    onboardData.languages.splice(existing, 1);
-  } else {
-    onboardData.languages.push({ language: lang, context });
-  }
+  if (existing >= 0) onboardData.languages.splice(existing, 1);
+  else onboardData.languages.push({ language: lang, context });
   renderLanguagePicker();
   updateLangSummary();
 }
@@ -187,8 +279,7 @@ function updateLangSummary() {
   const school = onboardData.languages.filter(l => l.context === 'school').map(l => l.language);
   const el = document.getElementById('lang-summary');
   if (el) el.textContent = home.length > 0 || school.length > 0
-    ? `Home: ${home.join(', ') || 'none'} · School: ${school.join(', ') || 'none'}`
-    : '';
+    ? `Home: ${home.join(', ') || 'none'} · School: ${school.join(', ') || 'none'}` : '';
 }
 
 function saveLanguages() {
@@ -222,8 +313,15 @@ async function completeOnboarding() {
   const btn = document.getElementById('onboard-finish-btn');
   if (btn) { btn.disabled = true; btn.textContent = 'Setting up…'; }
   try {
-    // 1. Create family
-    const families = await db.insert('families', { pin_hash: onboardData.pin, email: null });
+    const today = new Date().toISOString().split('T')[0];
+
+    // 1. Create family (with trial start date)
+    const families = await db.insert('families', {
+      pin_hash: onboardData.pin,
+      email: null,
+      trial_start_date: today,
+      is_paid: false,
+    });
     const family = Array.isArray(families) ? families[0] : families;
     const familyId = family.id;
 
@@ -251,20 +349,37 @@ async function completeOnboarding() {
     await db.insert('parents', { family_id: familyId, display_name: onboardData.parent2 });
 
     // 6. Init stats
-    await db.insert('child_stats', { child_id: childId, start_date: new Date().toISOString().split('T')[0] });
+    await db.insert('child_stats', { child_id: childId, start_date: today });
 
     // 7. Init domain progress
     for (const d of NOVARA.domains) {
       await db.insert('domain_progress', { child_id: childId, domain: d.id, pct: 0, last_activity: 'Not started yet' });
     }
 
-    // 8. Save session
+    // 8. Init default availability (weekday evenings + full weekend)
+    await db.insert('family_availability', {
+      family_id: familyId,
+      monday:    { available: true,  time_slots: ['evening'] },
+      tuesday:   { available: true,  time_slots: ['evening'] },
+      wednesday: { available: true,  time_slots: ['evening'] },
+      thursday:  { available: true,  time_slots: ['evening'] },
+      friday:    { available: true,  time_slots: ['evening'] },
+      saturday:  { available: true,  time_slots: ['morning', 'afternoon'] },
+      sunday:    { available: true,  time_slots: ['morning', 'afternoon'] },
+    });
+
+    // 9. Register device
+    await registerDevice(familyId);
+
+    // 10. Save session
     session.familyId = familyId;
     session.childId = childId;
     session.pinVerified = true;
+    session.trialStartDate = today;
+    session.isPaid = false;
     saveSession();
 
-    // 9. Load and go home
+    // 11. Load and go home
     await loadChildData();
     showScreen('home');
   } catch(e) {
@@ -273,7 +388,7 @@ async function completeOnboarding() {
   }
 }
 
-// ===== PIN =====
+// ===== PIN SCREEN =====
 function renderPinScreen() {
   const wrap = document.getElementById('pin-avatar-wrap');
   if (wrap && session.child) {
@@ -289,15 +404,23 @@ async function submitPIN() {
     const families = await db.select('families', `?id=eq.${session.familyId}`);
     const family = families?.[0];
     if (!family) { showPinError('Family not found'); return; }
-    if (entered === family.pin_hash) {
-      session.pinVerified = true;
-      document.getElementById('pin-input').value = '';
-      await loadChildData();
-      showScreen('home');
-    } else {
+    if (entered !== family.pin_hash) {
       showPinError('Incorrect PIN. Try again.');
       document.getElementById('pin-input').value = '';
+      return;
     }
+    // Check device authorisation
+    const deviceCheck = await registerDevice(session.familyId);
+    if (!deviceCheck.allowed) {
+      showDeviceLimitModal(deviceCheck.devices);
+      return;
+    }
+    session.pinVerified = true;
+    session.trialStartDate = family.trial_start_date;
+    session.isPaid = family.is_paid || false;
+    document.getElementById('pin-input').value = '';
+    await loadChildData();
+    showScreen('home');
   } catch(e) {
     showPinError('Error: ' + e.message);
   }
@@ -308,22 +431,49 @@ function showPinError(msg) {
   if (el) { el.textContent = msg; el.style.display = 'block'; }
 }
 
+// ===== DEVICE LIMIT MODAL =====
+function showDeviceLimitModal(devices) {
+  const modal = document.getElementById('modal-device-limit');
+  const list = document.getElementById('device-list');
+  if (list) {
+    list.innerHTML = (devices || []).map(d => `
+      <div class="device-item">
+        <i class="ti ti-device-mobile"></i>
+        <span>${d.device_name || 'Unknown device'}</span>
+        <span class="device-date">${formatDate(d.last_seen_at)}</span>
+      </div>`).join('');
+  }
+  if (modal) modal.style.display = 'flex';
+}
+
+async function removeThisDevice() {
+  try {
+    await resetDevice(session.familyId);
+    closeModal('modal-device-limit');
+    alert('This device has been removed. You can now register it as a new device by logging in again.');
+    location.reload();
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
 // ===== LOAD CHILD DATA =====
 async function loadChildData() {
   if (!session.childId) return;
   try {
-    const [children, languages, locations, parents, stats, domains] = await Promise.all([
+    const [children, languages, locations, parents, stats, domains, avail] = await Promise.all([
       db.select('children', `?id=eq.${session.childId}`),
       db.select('child_languages', `?child_id=eq.${session.childId}`),
       db.select('child_locations', `?child_id=eq.${session.childId}`),
       db.select('parents', `?family_id=eq.${session.familyId}`),
       db.select('child_stats', `?child_id=eq.${session.childId}`),
       db.select('domain_progress', `?child_id=eq.${session.childId}`),
+      db.select('family_availability', `?family_id=eq.${session.familyId}`),
     ]);
     session.child = children?.[0] || null;
     session.languages = languages || [];
     session.location = locations?.[0] || null;
     session.parents = parents || [];
+    session.availability = avail?.[0] || null;
+
     const s = stats?.[0];
     if (s) {
       const { week, ageMonths } = computeWeek(s.start_date, session.child.date_of_birth);
@@ -340,17 +490,20 @@ async function loadChildData() {
       const meta = NOVARA.domains.find(x => x.id === d.domain) || NOVARA.domains[0];
       return { ...meta, pct: d.pct || 0, last: d.last_activity || 'Not started yet' };
     });
-    if (session.domains.length === 0) session.domains = NOVARA.domains.map(d => ({ ...d, pct: 0, last: 'Not started yet' }));
-
-    // Load this week's plan if exists
-    const plans = await db.select('weekly_plans', `?child_id=eq.${session.childId}&week_number=eq.${session.weekNumber}`);
-    if (plans?.[0]) {
-      session.plan = plans[0].activities;
+    if (session.domains.length === 0) {
+      session.domains = NOVARA.domains.map(d => ({ ...d, pct: 0, last: 'Not started yet' }));
     }
 
-    // Count done activities this week
-    session.stats.done = session.plan.filter(a => a.status === 'done').length;
+    // ── FEATURE 1: Load existing plan — never regenerate automatically ──
+    const plans = await db.select('weekly_plans',
+      `?child_id=eq.${session.childId}&week_number=eq.${session.weekNumber}`);
+    if (plans?.[0]) {
+      session.plan = plans[0].activities;
+    } else {
+      session.plan = []; // empty — user must tap Generate
+    }
 
+    session.stats.done = session.plan.filter(a => a.status === 'done').length;
     saveSession();
   } catch(e) {
     console.error('loadChildData error:', e);
@@ -393,7 +546,6 @@ function renderHome() {
     }).join('');
   }
 
-  // Domains
   renderDomains('domain-list');
   renderRecentMilestones();
 }
@@ -441,7 +593,22 @@ async function renderRecentMilestones() {
 // ===== PLAN =====
 let currentActivity = null;
 
+// ── FEATURE 1: Guard — never regenerate if plan already exists for this week ──
 async function generatePlan() {
+  // Check if a plan already exists for this week in Supabase
+  const existing = await db.select('weekly_plans',
+    `?child_id=eq.${session.childId}&week_number=eq.${session.weekNumber}`);
+  if (existing?.[0]) {
+    // Plan already locked — just render it
+    session.plan = existing[0].activities;
+    saveSession();
+    renderPlan();
+    return;
+  }
+
+  // Trial gate
+  if (!isTrialActive()) { showTrialExpiredOverlay(); return; }
+
   document.getElementById('plan-empty').style.display = 'none';
   document.getElementById('plan-list').innerHTML = '';
   document.getElementById('plan-loading').style.display = 'flex';
@@ -455,9 +622,10 @@ async function generatePlan() {
   const parent2 = session.parents[1]?.display_name || 'Parent 2';
   const week = session.weekNumber;
   const ageMonths = session.ageMonths;
-
-  // Dynamic developmental context based on age
   const devContext = getDevelopmentalContext(ageMonths);
+
+  // ── FEATURE 2: Build availability context for the AI prompt ──
+  const availContext = buildAvailabilityContext();
 
   const prompt = `You are a world-class child development expert creating a personalised weekly activity plan.
 
@@ -472,12 +640,16 @@ CHILD PROFILE:
 DEVELOPMENTAL STAGE (${ageMonths} months):
 ${devContext}
 
-SCHEDULE: 3 weekday evening activities (10-15 mins, low setup) + 2 weekend activities (20-30 mins, richer).
+PARENT AVAILABILITY THIS WEEK:
+${availContext}
+
+IMPORTANT: Generate activities ONLY for days and time slots when parents are available (as listed above).
+Match activity length to available time slot: evening = 10-15 mins, morning = 20-30 mins, afternoon = 20-30 mins.
 
 Generate exactly 5 activities. Return ONLY a valid JSON array:
 [
   {
-    "day": "Monday Evening"|"Tuesday Evening"|"Wednesday Evening"|"Thursday Evening"|"Friday Evening"|"Saturday"|"Sunday",
+    "day": "Monday Evening"|"Tuesday Evening"|"Wednesday Evening"|"Thursday Evening"|"Friday Evening"|"Saturday Morning"|"Saturday Afternoon"|"Sunday Morning"|"Sunday Afternoon",
     "title": "Activity name",
     "domain": "cognitive"|"language"|"emotional"|"physical"|"creativity"|"social"|"cultural",
     "duration": "10-15 mins"|"20-30 mins",
@@ -513,7 +685,7 @@ RULES:
     const activities = JSON.parse(text.substring(start, end + 1));
     session.plan = activities.map((a, i) => ({ ...a, id: i, status: 'pending' }));
 
-    // Save to Supabase
+    // Save to Supabase — locked for this week
     await db.upsert('weekly_plans', {
       child_id: session.childId,
       week_number: week,
@@ -533,9 +705,29 @@ RULES:
   }
 }
 
+// ── FEATURE 2: Build availability description for AI prompt ──
+function buildAvailabilityContext() {
+  const avail = session.availability;
+  if (!avail) return 'Weekday evenings (10-15 mins) + Saturday and Sunday (20-30 mins)';
+
+  const days = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
+  const dayNames = { monday:'Monday', tuesday:'Tuesday', wednesday:'Wednesday', thursday:'Thursday',
+                     friday:'Friday', saturday:'Saturday', sunday:'Sunday' };
+  const slotLabels = { morning:'morning', afternoon:'afternoon', evening:'evening' };
+
+  const lines = [];
+  days.forEach(day => {
+    const d = avail[day];
+    if (d?.available && d.time_slots?.length > 0) {
+      lines.push(`- ${dayNames[day]}: ${d.time_slots.map(s => slotLabels[s]).join(', ')}`);
+    }
+  });
+  return lines.length > 0 ? lines.join('\n') : 'Weekday evenings + weekends';
+}
+
 function getDevelopmentalContext(ageMonths) {
-  if (ageMonths < 6) return `Pre-verbal stage. Focus: sensory exploration, face recognition, cause-effect, tummy time, auditory stimulation. Milestones: tracking objects, social smile, vocalisation.`;
-  if (ageMonths < 9) return `Early communication. Focus: babbling, object permanence intro, sitting support, reach and grasp. Milestones: responds to name, consonant sounds, sits with support.`;
+  if (ageMonths < 6)  return `Pre-verbal stage. Focus: sensory exploration, face recognition, cause-effect, tummy time, auditory stimulation. Milestones: tracking objects, social smile, vocalisation.`;
+  if (ageMonths < 9)  return `Early communication. Focus: babbling, object permanence intro, sitting support, reach and grasp. Milestones: responds to name, consonant sounds, sits with support.`;
   if (ageMonths < 12) return `Active explorer. Focus: crawling, pulling to stand, pincer grasp, first words emerging, stranger awareness. Milestones: waves bye-bye, says mama/dada, cruises furniture.`;
   if (ageMonths < 15) return `New walker. Focus: first independent steps, first words (5-10), stacking, object exploration, imitation. Milestones: walks alone, points, follows simple instructions.`;
   if (ageMonths < 18) return `Language foundation. Focus: vocabulary building (10-20 words), cause-effect play, shape sorting, climbing. Milestones: 2-word attempts, uses spoon, identifies body parts.`;
@@ -549,12 +741,20 @@ function getDevelopmentalContext(ageMonths) {
 
 function renderPlan() {
   document.getElementById('plan-loading').style.display = 'none';
+
+  if (!session.plan || session.plan.length === 0) {
+    document.getElementById('plan-empty').style.display = 'flex';
+    document.getElementById('plan-list').innerHTML = '';
+    return;
+  }
+
   document.getElementById('plan-empty').style.display = 'none';
   document.getElementById('plan-week-label').textContent = `Week ${session.weekNumber} · Age ${session.ageMonths} months`;
 
   const grouped = {};
   session.plan.forEach(a => { if (!grouped[a.day]) grouped[a.day] = []; grouped[a.day].push(a); });
-  const order = ['Monday Evening','Tuesday Evening','Wednesday Evening','Thursday Evening','Friday Evening','Saturday','Sunday'];
+  const order = ['Monday Evening','Tuesday Evening','Wednesday Evening','Thursday Evening','Friday Evening',
+                 'Saturday Morning','Saturday Afternoon','Sunday Morning','Sunday Afternoon','Saturday','Sunday'];
   const days = order.filter(d => grouped[d]);
 
   let html = '';
@@ -598,7 +798,9 @@ function openActivity(id) {
   document.getElementById('act-modal-title').textContent = act.title;
   let mats = '';
   if (act.materials?.length > 0) {
-    mats = `<div class="act-detail-section"><h4>Materials</h4><ul class="act-materials-list">${act.materials.map(m => `<li>🛒 ${m.name} ${m.required ? '<span style="color:#F97316;font-size:10px">Required</span>' : ''} <a href="${m.link}" target="_blank">Buy →</a></li>`).join('')}</ul></div>`;
+    mats = `<div class="act-detail-section"><h4>Materials</h4><ul class="act-materials-list">${act.materials.map(m =>
+      `<li>🛒 ${m.name} ${m.required ? '<span style="color:#F97316;font-size:10px">Required</span>' : ''} <a href="${m.link}" target="_blank">Buy →</a></li>`
+    ).join('')}</ul></div>`;
   }
   document.getElementById('act-modal-body').innerHTML = `
     <div class="act-detail-section"><h4>What to do</h4><p>${act.description}</p></div>
@@ -624,12 +826,9 @@ async function quickMark(id, status) {
     const dom = session.domains.find(d => d.id === act.domain);
     if (dom) { dom.pct = Math.min(100, dom.pct + 14); dom.last = act.title; }
     session.stats.streak++;
-    // Update domain progress in DB
     await db.upsert('domain_progress', { child_id: session.childId, domain: act.domain, pct: dom?.pct || 0, last_activity: act.title });
-    // Update stats
     await db.update('child_stats', { streak: session.stats.streak }, `?child_id=eq.${session.childId}`);
   }
-  // Save updated plan
   await db.upsert('weekly_plans', { child_id: session.childId, week_number: session.weekNumber, age_months: session.ageMonths, activities: session.plan });
   saveSession();
   renderPlan();
@@ -736,7 +935,6 @@ async function renderProgress() {
         </div>
       </div>`).join('');
   }
-
   try {
     const history = await db.select('week_history', `?child_id=eq.${session.childId}&order=week_number.desc&limit=4`);
     const weeks = history?.length > 0 ? history.reverse() : [
@@ -751,7 +949,6 @@ async function renderProgress() {
         const h = Math.max(4, Math.round((w.done / max) * 70));
         return `<div class="bar-col"><div class="bar-val">${w.done}/${w.total}</div><div class="bar" style="height:${h}px;background:${w.done === w.total ? '#10B981' : '#0E7490'}"></div><div class="bar-label">Wk${w.week_number}</div></div>`;
       }).join('')}</div>`;
-
     const allMs = await db.select('milestones', `?child_id=eq.${session.childId}&order=logged_at.desc`);
     const msEl = document.getElementById('all-milestones');
     if (!allMs || allMs.length === 0) {
@@ -763,6 +960,189 @@ async function renderProgress() {
       return `<div class="milestone-card"><div class="ms-dot" style="background:${d?.color}"></div><div><div class="ms-title">${m.title}</div><div class="ms-meta">${d?.name} · ${formatDate(m.logged_at)} · ${m.parent_name}</div>${m.notes ? `<div class="ms-meta" style="margin-top:4px">${m.notes}</div>` : ''}</div></div>`;
     }).join('') + `</div>`;
   } catch(e) { console.error(e); }
+}
+
+// ===== CHAT (FEATURE 4) =====
+async function renderChat() {
+  if (!session.child) return;
+  const list = document.getElementById('chat-messages-list');
+  if (!list) return;
+  list.innerHTML = `<div class="chat-loading"><div class="spinner"></div></div>`;
+  try {
+    const messages = await db.select('chat_messages',
+      `?child_id=eq.${session.childId}&order=sent_at.asc`);
+    if (!messages || messages.length === 0) {
+      list.innerHTML = `<div class="chat-empty"><i class="ti ti-message-dots"></i><p>No messages yet.<br>Start the conversation!</p></div>`;
+    } else {
+      list.innerHTML = messages.map(m => {
+        const isMe = m.parent_name === session.parents[0]?.display_name;
+        return `
+          <div class="chat-bubble ${isMe ? 'chat-bubble-me' : 'chat-bubble-them'}">
+            <div class="chat-sender">${m.parent_name}</div>
+            <div class="chat-text">${m.message}</div>
+            <div class="chat-time">${formatDate(m.sent_at)}</div>
+          </div>`;
+      }).join('');
+      // Scroll to bottom
+      list.scrollTop = list.scrollHeight;
+    }
+  } catch(e) { list.innerHTML = `<p style="padding:16px;color:red">Error: ${e.message}</p>`; }
+}
+
+async function sendChatMessage() {
+  const input = document.getElementById('chat-input');
+  const parentSel = document.getElementById('chat-parent-select');
+  const msg = input?.value.trim();
+  if (!msg) return;
+  const parentName = parentSel?.value || session.parents[0]?.display_name || 'Parent';
+  try {
+    await db.insert('chat_messages', {
+      child_id: session.childId,
+      family_id: session.familyId,
+      parent_name: parentName,
+      message: msg,
+    });
+    input.value = '';
+    await renderChat();
+  } catch(e) { alert('Error sending message: ' + e.message); }
+}
+
+// ===== SHOPPING LIST (FEATURE 8) =====
+async function renderShoppingList() {
+  const listEl = document.getElementById('shopping-list');
+  if (!listEl) return;
+  listEl.innerHTML = `<div class="chat-loading"><div class="spinner"></div></div>`;
+
+  try {
+    // Fetch plans for current week + next 2 weeks ahead
+    const weeksToCheck = [session.weekNumber, session.weekNumber + 1, session.weekNumber + 2];
+    const allMaterials = [];
+
+    for (const wk of weeksToCheck) {
+      const plans = await db.select('weekly_plans',
+        `?child_id=eq.${session.childId}&week_number=eq.${wk}`);
+      if (plans?.[0]?.activities) {
+        plans[0].activities.forEach(act => {
+          if (act.materials?.length > 0) {
+            act.materials.forEach(m => {
+              allMaterials.push({ ...m, week: wk, activity: act.title });
+            });
+          }
+        });
+      }
+    }
+
+    if (allMaterials.length === 0) {
+      listEl.innerHTML = `
+        <div class="empty-state" style="padding:32px">
+          <i class="ti ti-shopping-cart"></i>
+          <p>No materials needed yet.<br>Generate plans for the next 3 weeks to see your shopping list.</p>
+        </div>`;
+      return;
+    }
+
+    // Group by week
+    const grouped = {};
+    allMaterials.forEach(m => {
+      if (!grouped[m.week]) grouped[m.week] = [];
+      grouped[m.week].push(m);
+    });
+
+    listEl.innerHTML = Object.entries(grouped).map(([wk, items]) => `
+      <div class="shopping-week-group">
+        <div class="shopping-week-label">
+          <i class="ti ti-calendar"></i>
+          Week ${wk} ${parseInt(wk) === session.weekNumber ? '(This week)' : parseInt(wk) === session.weekNumber + 1 ? '(Next week)' : '(In 2 weeks)'}
+        </div>
+        ${items.map(item => `
+          <div class="shopping-item ${item.required ? 'required' : ''}">
+            <div class="shopping-item-info">
+              <div class="shopping-item-name">🛒 ${item.name}</div>
+              <div class="shopping-item-activity">For: ${item.activity}</div>
+              ${item.required ? '<span class="shopping-required-badge">Required</span>' : ''}
+            </div>
+            <a href="${item.link}" target="_blank" class="shopping-buy-btn">
+              <i class="ti ti-external-link"></i> Buy
+            </a>
+          </div>`).join('')}
+      </div>`).join('');
+  } catch(e) {
+    listEl.innerHTML = `<p style="padding:16px;color:red">Error: ${e.message}</p>`;
+  }
+}
+
+// ===== AVAILABILITY SETTINGS (FEATURE 2) =====
+function renderAvailabilitySettings() {
+  const el = document.getElementById('availability-grid');
+  if (!el) return;
+  const avail = session.availability || {};
+  const days = [
+    { key: 'monday', label: 'Mon' },
+    { key: 'tuesday', label: 'Tue' },
+    { key: 'wednesday', label: 'Wed' },
+    { key: 'thursday', label: 'Thu' },
+    { key: 'friday', label: 'Fri' },
+    { key: 'saturday', label: 'Sat' },
+    { key: 'sunday', label: 'Sun' },
+  ];
+  const slots = [
+    { key: 'morning', label: 'Morning' },
+    { key: 'afternoon', label: 'Afternoon' },
+    { key: 'evening', label: 'Evening' },
+  ];
+  el.innerHTML = days.map(day => {
+    const d = avail[day.key] || { available: false, time_slots: [] };
+    return `
+      <div class="avail-day-row">
+        <label class="avail-day-toggle">
+          <input type="checkbox" ${d.available ? 'checked' : ''} onchange="toggleDayAvail('${day.key}',this.checked)" />
+          <span>${day.label}</span>
+        </label>
+        <div class="avail-slots ${d.available ? '' : 'avail-slots-hidden'}" id="slots-${day.key}">
+          ${slots.map(slot => `
+            <label class="avail-slot-btn">
+              <input type="checkbox" ${d.time_slots?.includes(slot.key) ? 'checked' : ''}
+                onchange="toggleSlot('${day.key}','${slot.key}',this.checked)" />
+              <span>${slot.label}</span>
+            </label>`).join('')}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function toggleDayAvail(day, checked) {
+  if (!session.availability) session.availability = {};
+  if (!session.availability[day]) session.availability[day] = { available: false, time_slots: [] };
+  session.availability[day].available = checked;
+  const slotsEl = document.getElementById(`slots-${day}`);
+  if (slotsEl) slotsEl.classList.toggle('avail-slots-hidden', !checked);
+  saveAvailability();
+}
+
+function toggleSlot(day, slot, checked) {
+  if (!session.availability?.[day]) return;
+  const slots = session.availability[day].time_slots || [];
+  if (checked && !slots.includes(slot)) slots.push(slot);
+  if (!checked) { const i = slots.indexOf(slot); if (i > -1) slots.splice(i, 1); }
+  session.availability[day].time_slots = slots;
+  saveAvailability();
+}
+
+async function saveAvailability() {
+  try {
+    const avail = session.availability;
+    await db.upsert('family_availability', {
+      family_id: session.familyId,
+      monday: avail.monday,
+      tuesday: avail.tuesday,
+      wednesday: avail.wednesday,
+      thursday: avail.thursday,
+      friday: avail.friday,
+      saturday: avail.saturday,
+      sunday: avail.sunday,
+    });
+    saveSession();
+  } catch(e) { console.error('Availability save error:', e); }
 }
 
 // ===== SETTINGS =====
@@ -781,9 +1161,22 @@ function renderSettings() {
   if (el('settings-week')) el('settings-week').textContent = `Week ${session.weekNumber} of 52`;
   if (el('settings-age')) el('settings-age').textContent = `${session.ageMonths} months`;
   if (el('settings-location')) el('settings-location').textContent = session.location ? `${session.location.city}, ${session.location.country}` : 'Not set';
-  if (el('settings-languages')) {
-    el('settings-languages').textContent = session.languages.map(l => `${l.language} (${l.context})`).join(', ');
+  if (el('settings-languages')) el('settings-languages').textContent = session.languages.map(l => `${l.language} (${l.context})`).join(', ');
+
+  // Trial info
+  const trialEl = el('settings-trial-info');
+  if (trialEl) {
+    if (session.isPaid) {
+      trialEl.textContent = 'Full access — thank you!';
+      trialEl.style.color = '#10B981';
+    } else {
+      const days = getTrialDaysRemaining();
+      trialEl.textContent = days > 0 ? `${days} trial days remaining` : 'Trial expired';
+      trialEl.style.color = days <= 3 ? '#F97316' : 'var(--color-text-secondary)';
+    }
   }
+
+  renderAvailabilitySettings();
 }
 
 async function saveChildName() {
@@ -855,7 +1248,7 @@ function showChangePinError(msg) {
 }
 
 function populateParentSelects() {
-  ['ms-parent', 'moment-parent'].forEach(id => {
+  ['ms-parent','moment-parent','chat-parent-select'].forEach(id => {
     const sel = document.getElementById(id);
     if (sel) sel.innerHTML = session.parents.map(p => `<option value="${p.display_name}">${p.display_name}</option>`).join('');
   });
@@ -864,6 +1257,7 @@ function populateParentSelects() {
 function resetAll() {
   if (confirm('Delete ALL data? This cannot be undone.')) {
     localStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem('novara_device_id');
     location.reload();
   }
 }

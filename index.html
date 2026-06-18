@@ -8,6 +8,151 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" />
   <link rel="stylesheet" href="style.css" />
+  <style>
+    /* ── TRIAL BANNER ─────────────────────────────── */
+    .trial-banner {
+      background: linear-gradient(135deg, #FEF3C7, #FFF7ED);
+      border-bottom: 1px solid #F59E0B;
+      color: #92400E;
+      font-size: 13px;
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .trial-banner i { color: #F59E0B; flex-shrink: 0; }
+
+    /* ── TRIAL EXPIRED OVERLAY ──────────────────────── */
+    .trial-expired-overlay {
+      position: fixed; inset: 0; z-index: 9999;
+      background: rgba(10,37,64,0.92);
+      display: flex; align-items: center; justify-content: center;
+      padding: 24px;
+    }
+    .trial-expired-card {
+      background: white; border-radius: 20px;
+      padding: 32px 24px; max-width: 340px; width: 100%;
+      text-align: center;
+    }
+    .trial-expired-card h2 { font-family: 'DM Serif Display', serif; color: #0A2540; margin: 12px 0 8px; }
+    .trial-expired-card p { color: #64748B; font-size: 14px; line-height: 1.6; margin-bottom: 20px; }
+
+    /* ── CHAT SCREEN ────────────────────────────────── */
+    .chat-screen { display: flex; flex-direction: column; height: 100vh; }
+    .chat-messages-area {
+      flex: 1; overflow-y: auto; padding: 16px;
+      display: flex; flex-direction: column; gap: 12px;
+    }
+    .chat-bubble {
+      max-width: 78%; padding: 10px 14px; border-radius: 16px;
+      font-size: 14px; line-height: 1.5;
+    }
+    .chat-bubble-me {
+      align-self: flex-end;
+      background: #0E7490; color: white;
+      border-bottom-right-radius: 4px;
+    }
+    .chat-bubble-them {
+      align-self: flex-start;
+      background: #F1F5F9; color: #1E293B;
+      border-bottom-left-radius: 4px;
+    }
+    .chat-sender { font-size: 11px; font-weight: 600; margin-bottom: 3px; opacity: 0.7; }
+    .chat-time { font-size: 10px; margin-top: 4px; opacity: 0.6; text-align: right; }
+    .chat-input-bar {
+      display: flex; gap: 8px; padding: 12px 16px;
+      border-top: 1px solid #E2E8F0;
+      background: white; align-items: center;
+    }
+    .chat-input-bar select {
+      font-size: 12px; border: 1px solid #E2E8F0; border-radius: 8px;
+      padding: 6px 8px; background: white; color: #334155; flex-shrink: 0;
+    }
+    .chat-input-bar input {
+      flex: 1; border: 1px solid #E2E8F0; border-radius: 20px;
+      padding: 10px 14px; font-size: 14px; outline: none;
+    }
+    .chat-input-bar input:focus { border-color: #0E7490; }
+    .chat-send-btn {
+      width: 40px; height: 40px; border-radius: 50%;
+      background: #0E7490; color: white; border: none;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .chat-empty, .chat-loading {
+      text-align: center; color: #94A3B8;
+      padding: 48px 24px; font-size: 14px;
+      display: flex; flex-direction: column; align-items: center; gap: 12px;
+    }
+    .chat-empty i { font-size: 36px; }
+
+    /* ── SHOPPING LIST ──────────────────────────────── */
+    .shopping-week-group { margin-bottom: 20px; }
+    .shopping-week-label {
+      font-size: 12px; font-weight: 600; color: #0E7490;
+      text-transform: uppercase; letter-spacing: 0.5px;
+      padding: 8px 0 6px; display: flex; align-items: center; gap: 6px;
+      border-bottom: 1px solid #E0F7FA; margin-bottom: 10px;
+    }
+    .shopping-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 0; border-bottom: 1px solid #F1F5F9; gap: 12px;
+    }
+    .shopping-item.required .shopping-item-name { font-weight: 600; }
+    .shopping-item-info { flex: 1; min-width: 0; }
+    .shopping-item-name { font-size: 14px; color: #1E293B; }
+    .shopping-item-activity { font-size: 12px; color: #94A3B8; margin-top: 2px; }
+    .shopping-required-badge {
+      display: inline-block; font-size: 10px; font-weight: 600;
+      background: #FFF7ED; color: #F97316;
+      border-radius: 4px; padding: 2px 6px; margin-top: 4px;
+    }
+    .shopping-buy-btn {
+      flex-shrink: 0; font-size: 12px; font-weight: 600;
+      color: #0E7490; text-decoration: none;
+      background: #E0F7FA; border-radius: 8px; padding: 6px 12px;
+      display: flex; align-items: center; gap: 4px;
+    }
+
+    /* ── AVAILABILITY GRID ──────────────────────────── */
+    .avail-day-row {
+      display: flex; align-items: flex-start; gap: 12px;
+      padding: 10px 0; border-bottom: 1px solid #F1F5F9;
+    }
+    .avail-day-toggle {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 13px; font-weight: 600; color: #334155;
+      cursor: pointer; min-width: 48px; flex-shrink: 0;
+    }
+    .avail-day-toggle input[type=checkbox] { accent-color: #0E7490; }
+    .avail-slots { display: flex; flex-wrap: wrap; gap: 6px; }
+    .avail-slots-hidden { opacity: 0.3; pointer-events: none; }
+    .avail-slot-btn {
+      display: flex; align-items: center; gap: 4px;
+      font-size: 12px; color: #475569;
+      background: #F8FAFC; border: 1px solid #E2E8F0;
+      border-radius: 6px; padding: 4px 10px; cursor: pointer;
+    }
+    .avail-slot-btn input[type=checkbox] { accent-color: #0E7490; }
+
+    /* ── DEVICE ITEM ────────────────────────────────── */
+    .device-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 0; border-bottom: 1px solid #F1F5F9;
+      font-size: 14px; color: #334155;
+    }
+    .device-item i { color: #0E7490; font-size: 18px; flex-shrink: 0; }
+    .device-date { font-size: 12px; color: #94A3B8; margin-left: auto; }
+
+    /* ── PIN SCREEN EXTRAS ──────────────────────────── */
+    .pin-device-actions {
+      margin-top: 20px; text-align: center;
+    }
+    .pin-device-link {
+      font-size: 13px; color: #0E7490; cursor: pointer;
+      text-decoration: underline; background: none; border: none;
+    }
+  </style>
 </head>
 <body>
 <div id="app">
@@ -28,13 +173,17 @@
     <div class="onboard-hero">
       <div class="onboard-icon">🌊</div>
       <h1 class="onboard-title">Welcome to Novara</h1>
-      <p class="onboard-sub">AI-powered developmental guidance personalised for your child — wherever you are in the world.</p>
+      <p class="onboard-sub">Personalised developmental guidance for your child — wherever you are in the world.</p>
     </div>
     <div class="onboard-features">
-      <div class="onboard-feature"><i class="ti ti-sparkles" style="color:#22D3EE"></i><span>AI weekly activity plans</span></div>
+      <div class="onboard-feature"><i class="ti ti-sparkles" style="color:#22D3EE"></i><span>Novara weekly activity plans</span></div>
       <div class="onboard-feature"><i class="ti ti-world" style="color:#10B981"></i><span>Any language, any country</span></div>
       <div class="onboard-feature"><i class="ti ti-chart-line" style="color:#F59E0B"></i><span>7 developmental domains tracked</span></div>
       <div class="onboard-feature"><i class="ti ti-lock" style="color:#8B5CF6"></i><span>Private to your family</span></div>
+    </div>
+    <div class="trial-info-box">
+      <i class="ti ti-gift" style="color:#0E7490"></i>
+      <span><strong>14-day free trial</strong> — no payment needed to get started</span>
     </div>
     <button class="btn-primary full-width" onclick="startOnboarding()">Get started <i class="ti ti-arrow-right"></i></button>
   </div>
@@ -82,7 +231,7 @@
     <div class="onboard-step">Step 3 of 5</div>
     <div class="onboard-icon">🗣️</div>
     <h2 class="onboard-title">Languages in <span id="onboard-child-display">your child</span>'s life</h2>
-    <p class="onboard-sub">Select all languages spoken at home and at school. The AI weaves them into every activity.</p>
+    <p class="onboard-sub">Select all languages spoken at home and at school. Novara weaves them into every activity.</p>
     <div class="lang-picker-section">
       <div class="lang-picker-label">🏠 At home</div>
       <div id="lang-home-list" class="lang-picker-grid"></div>
@@ -133,6 +282,12 @@
       onkeydown="if(event.key==='Enter') submitPIN()" />
     <p id="pin-error" class="pin-error" style="display:none"></p>
     <button class="btn-primary full-width" onclick="submitPIN()">Unlock</button>
+    <!-- FEATURE 5: Device management link on login screen -->
+    <div class="pin-device-actions">
+      <button class="pin-device-link" onclick="document.getElementById('modal-device-limit').style.display='flex'">
+        <i class="ti ti-device-mobile"></i> Manage devices
+      </button>
+    </div>
   </div>
 </div>
 
@@ -183,17 +338,19 @@
       <div class="child-name">Weekly Plan</div>
       <div class="child-meta" id="plan-week-label">Week 1</div>
     </div>
-    <button class="icon-btn" onclick="generatePlan()"><i class="ti ti-refresh"></i></button>
+    <!-- FEATURE 1: Refresh icon now only reloads existing plan, no auto-regenerate -->
+    <button class="icon-btn" onclick="generatePlan()" title="Generate or load this week's plan"><i class="ti ti-refresh"></i></button>
   </div>
   <div class="scroll-area">
     <div class="section">
-      <div class="ai-banner"><i class="ti ti-sparkles"></i><span>AI-generated — personalised to age, languages & location</span></div>
+      <!-- FEATURE 3: "AI" replaced with "Novara" -->
+      <div class="ai-banner"><i class="ti ti-sparkles"></i><span>Novara-generated — personalised to age, languages &amp; location</span></div>
     </div>
-    <div id="plan-loading" class="loading-state" style="display:none"><div class="spinner"></div><p>Generating your personalised plan…</p></div>
+    <div id="plan-loading" class="loading-state" style="display:none"><div class="spinner"></div><p>Novara is generating your personalised plan…</p></div>
     <div id="plan-list" class="plan-list"></div>
     <div id="plan-empty" class="empty-state section">
-      <i class="ti ti-robot"></i>
-      <p>Tap generate to create this week's<br>AI-powered activity plan.</p>
+      <i class="ti ti-sparkles" style="color:#22D3EE"></i>
+      <p>Tap generate to create this week's<br>Novara activity plan.</p>
       <button class="btn-primary" style="margin-top:16px" onclick="generatePlan()"><i class="ti ti-sparkles"></i> Generate Plan</button>
     </div>
     <div style="height:90px"></div>
@@ -216,7 +373,7 @@
 <!-- ===== MOMENTS ===== -->
 <div id="screen-moments" class="screen">
   <div class="topbar">
-    <div><div class="app-label">Novara</div><div class="child-name">Moments</div><div class="child-meta">Photos, notes & memories</div></div>
+    <div><div class="app-label">Novara</div><div class="child-name">Moments</div><div class="child-meta">Photos, notes &amp; memories</div></div>
     <button class="icon-btn" onclick="openAddMoment()"><i class="ti ti-plus"></i></button>
   </div>
   <div class="scroll-area">
@@ -229,10 +386,41 @@
   </div>
 </div>
 
+<!-- ===== CHAT (FEATURE 4) ===== -->
+<div id="screen-chat" class="screen">
+  <div class="topbar">
+    <div><div class="app-label">Novara</div><div class="child-name">Family Chat</div><div class="child-meta">Discuss your child's journey</div></div>
+  </div>
+  <div id="chat-messages-list" class="chat-messages-area"></div>
+  <div class="chat-input-bar">
+    <select id="chat-parent-select"></select>
+    <input id="chat-input" type="text" placeholder="Type a message…" onkeydown="if(event.key==='Enter') sendChatMessage()" />
+    <button class="chat-send-btn" onclick="sendChatMessage()"><i class="ti ti-send"></i></button>
+  </div>
+</div>
+
+<!-- ===== SHOPPING LIST (FEATURE 8) ===== -->
+<div id="screen-shopping" class="screen">
+  <div class="topbar">
+    <div><div class="app-label">Novara</div><div class="child-name">Shopping List</div><div class="child-meta">Materials for the next 3 weeks</div></div>
+  </div>
+  <div class="scroll-area">
+    <div class="section">
+      <div class="ai-banner"><i class="ti ti-shopping-cart"></i><span>Buy ahead — materials for upcoming activities across the next 3 weeks</span></div>
+    </div>
+    <div class="section">
+      <div id="shopping-list"></div>
+    </div>
+    <div style="height:90px"></div>
+  </div>
+</div>
+
 <!-- ===== SETTINGS ===== -->
 <div id="screen-settings" class="screen">
   <div class="topbar"><div><div class="app-label">Novara</div><div class="child-name">Settings</div></div></div>
   <div class="scroll-area">
+
+    <!-- Child profile -->
     <div class="section">
       <div class="section-label">Child profile</div>
       <div class="settings-card">
@@ -249,6 +437,8 @@
         <div class="settings-row"><span>Languages</span><span id="settings-languages" style="font-size:12px;color:var(--color-text-secondary);text-align:right;max-width:200px">—</span></div>
       </div>
     </div>
+
+    <!-- Parents -->
     <div class="section">
       <div class="section-label">Parents</div>
       <div class="settings-card">
@@ -257,6 +447,17 @@
         <div style="padding:10px 16px"><button class="btn-primary full-width" onclick="saveParentNames()"><i class="ti ti-check"></i> Save names</button></div>
       </div>
     </div>
+
+    <!-- FEATURE 2: Availability -->
+    <div class="section">
+      <div class="section-label">Your availability</div>
+      <div class="settings-card" style="padding:12px 16px">
+        <p style="font-size:13px;color:var(--color-text-secondary);margin-bottom:12px">Novara uses this to schedule activities on days and times you're free.</p>
+        <div id="availability-grid"></div>
+      </div>
+    </div>
+
+    <!-- Programme -->
     <div class="section">
       <div class="section-label">Programme</div>
       <div class="settings-card">
@@ -265,18 +466,41 @@
         <div class="settings-row"><span>Week progression</span><span class="badge-active"><i class="ti ti-clock"></i> Automatic</span></div>
       </div>
     </div>
+
+    <!-- FEATURE 6/7: Trial status -->
+    <div class="section">
+      <div class="section-label">Subscription</div>
+      <div class="settings-card">
+        <div class="settings-row">
+          <span><i class="ti ti-crown" style="color:#F59E0B"></i> Trial status</span>
+          <strong id="settings-trial-info">—</strong>
+        </div>
+        <div style="padding:10px 16px">
+          <button class="btn-primary full-width" onclick="alert('Upgrade flow coming soon!')"><i class="ti ti-crown"></i> Upgrade Novara</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Security -->
     <div class="section">
       <div class="section-label">Security</div>
       <div class="settings-card">
         <button class="settings-btn" onclick="document.getElementById('modal-change-pin').style.display='flex'"><i class="ti ti-lock"></i> Change PIN</button>
+        <!-- FEATURE 5: Device management in settings -->
+        <button class="settings-btn" onclick="showScreen('pin');document.getElementById('modal-device-limit').style.display='flex'">
+          <i class="ti ti-device-mobile"></i> Manage devices
+        </button>
       </div>
     </div>
+
+    <!-- Data -->
     <div class="section">
       <div class="section-label">Data</div>
       <div class="settings-card">
         <button class="settings-btn danger" onclick="resetAll()"><i class="ti ti-trash"></i> Reset all data</button>
       </div>
     </div>
+
     <div style="height:90px"></div>
   </div>
 </div>
@@ -287,10 +511,12 @@
   <button class="nav-btn" onclick="showScreen('plan')" data-screen="plan"><i class="ti ti-calendar"></i><span>Plan</span></button>
   <button class="nav-btn" onclick="showScreen('progress')" data-screen="progress"><i class="ti ti-chart-line"></i><span>Progress</span></button>
   <button class="nav-btn" onclick="showScreen('moments')" data-screen="moments"><i class="ti ti-photo"></i><span>Moments</span></button>
+  <button class="nav-btn" onclick="showScreen('chat')" data-screen="chat"><i class="ti ti-message-dots"></i><span>Chat</span></button>
+  <button class="nav-btn" onclick="showScreen('shopping')" data-screen="shopping"><i class="ti ti-shopping-cart"></i><span>Shop</span></button>
   <button class="nav-btn" onclick="showScreen('settings')" data-screen="settings"><i class="ti ti-settings"></i><span>Settings</span></button>
 </nav>
 
-<!-- MODAL: MILESTONE -->
+<!-- ===== MODAL: MILESTONE ===== -->
 <div id="modal-milestone" class="modal-overlay" style="display:none" onclick="closeModal('modal-milestone')">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-header"><h3>Log a Milestone</h3><button onclick="closeModal('modal-milestone')"><i class="ti ti-x"></i></button></div>
@@ -298,12 +524,12 @@
       <label>Milestone title</label><input id="ms-title" type="text" placeholder="e.g. First word in Yoruba" />
       <label>Domain</label>
       <select id="ms-domain">
-        <option value="language">Language & Signs</option>
+        <option value="language">Language &amp; Signs</option>
         <option value="cognitive">Cognitive</option>
         <option value="emotional">Emotional Intelligence</option>
-        <option value="physical">Physical & Motor</option>
+        <option value="physical">Physical &amp; Motor</option>
         <option value="creativity">Creativity</option>
-        <option value="social">Social & Character</option>
+        <option value="social">Social &amp; Character</option>
         <option value="cultural">Cultural Identity</option>
       </select>
       <label>Logged by</label><select id="ms-parent"><option>Mama</option><option>Papa</option></select>
@@ -316,7 +542,7 @@
   </div>
 </div>
 
-<!-- MODAL: MOMENT -->
+<!-- ===== MODAL: MOMENT ===== -->
 <div id="modal-moment" class="modal-overlay" style="display:none" onclick="closeModal('modal-moment')">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-header"><h3>Add a Moment</h3><button onclick="closeModal('modal-moment')"><i class="ti ti-x"></i></button></div>
@@ -333,7 +559,7 @@
   </div>
 </div>
 
-<!-- MODAL: ACTIVITY -->
+<!-- ===== MODAL: ACTIVITY ===== -->
 <div id="modal-activity" class="modal-overlay" style="display:none" onclick="closeModal('modal-activity')">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-header"><h3 id="act-modal-title">Activity</h3><button onclick="closeModal('modal-activity')"><i class="ti ti-x"></i></button></div>
@@ -345,7 +571,7 @@
   </div>
 </div>
 
-<!-- MODAL: CHANGE PIN -->
+<!-- ===== MODAL: CHANGE PIN ===== -->
 <div id="modal-change-pin" class="modal-overlay" style="display:none" onclick="closeModal('modal-change-pin')">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-header"><h3>Change PIN</h3><button onclick="closeModal('modal-change-pin')"><i class="ti ti-x"></i></button></div>
@@ -362,8 +588,29 @@
   </div>
 </div>
 
+<!-- ===== MODAL: DEVICE LIMIT (FEATURE 5) ===== -->
+<div id="modal-device-limit" class="modal-overlay" style="display:none" onclick="closeModal('modal-device-limit')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header"><h3><i class="ti ti-device-mobile"></i> Registered Devices</h3><button onclick="closeModal('modal-device-limit')"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--color-text-secondary);margin-bottom:12px">
+        Novara allows up to 2 devices per family account. Your registered devices:
+      </p>
+      <div id="device-list"></div>
+      <div style="margin-top:16px;padding:12px;background:#FEF3C7;border-radius:10px;font-size:13px;color:#92400E">
+        <i class="ti ti-info-circle"></i>
+        To use this device, remove one of the registered devices first, then log in again.
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeModal('modal-device-limit')">Close</button>
+      <button class="btn-primary" onclick="removeThisDevice()"><i class="ti ti-device-mobile-off"></i> Remove this device &amp; re-register</button>
+    </div>
+  </div>
 </div>
-<script src="config.js?v=3"></script>
-<script src="app.js?v=3"></script>
+
+</div>
+<script src="config.js?v=4"></script>
+<script src="app.js?v=4"></script>
 </body>
 </html>
