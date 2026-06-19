@@ -15,7 +15,8 @@ let session = {
   ageMonths: 0,
   trialStartDate: null,
   isPaid: false,
-  weekAvailability: null, // current week's availability
+  trialPlanUsed: false,   // true once the family's first free plan has been generated
+  weekAvailability: null,
 };
 
 function saveSession() {
@@ -76,24 +77,24 @@ async function resetDevice(familyId) {
 }
 
 // ===== TRIAL HELPERS =====
-function getTrialDaysRemaining() {
-  if (session.isPaid) return Infinity;
-  if (!session.trialStartDate) return NOVARA.trialDays;
-  const start = new Date(session.trialStartDate);
-  const now = new Date();
-  const daysPassed = Math.floor((now - start) / 86400000);
-  return Math.max(0, NOVARA.trialDays - daysPassed);
+// Trial = feature-based: 1 free week of plan generation (not time-based)
+// session.trialPlanUsed = true once the first plan has been generated and the week is complete
+
+function hasUsedTrialPlan() {
+  // Trial plan is "used" when a plan has been generated AND marked as trial_plan_used on the family
+  return session.trialPlanUsed === true;
 }
 
 function isTrialActive() {
-  return session.isPaid || getTrialDaysRemaining() > 0;
+  // Paid users always active; trial users active until they've used their one free week plan
+  return session.isPaid || !hasUsedTrialPlan();
 }
 
 // Trial feature gates
 function canGeneratePlan() {
-  // Trial: only 1 week of plan generation allowed
   if (session.isPaid) return true;
-  return isTrialActive();
+  // Trial: can generate only if no plan has been generated yet for this family
+  return !hasUsedTrialPlan();
 }
 
 function canUseChat() { return session.isPaid; }
@@ -101,21 +102,19 @@ function canUseShopping() { return session.isPaid; }
 function canSeeFullHistory() { return session.isPaid; }
 
 function renderTrialBanner() {
-  // Remove existing banners first
   document.querySelectorAll('.trial-banner').forEach(b => b.remove());
   if (session.isPaid) return;
-  const days = getTrialDaysRemaining();
-  if (days <= 0) { showTrialExpiredOverlay(); return; }
 
+  if (hasUsedTrialPlan()) { showTrialExpiredOverlay(); return; }
+
+  // Show a simple "trial" label — no countdown
   const screens = ['screen-home','screen-plan','screen-progress','screen-moments','screen-settings'];
   screens.forEach(sid => {
     const sc = document.getElementById(sid);
     if (!sc) return;
     const banner = document.createElement('div');
     banner.className = 'trial-banner';
-    banner.innerHTML = days <= 3
-      ? `<i class="ti ti-clock-exclamation"></i> <strong>${days} day${days !== 1 ? 's' : ''} left</strong> in your trial — <a href="#" onclick="showWaitlistModal()" style="color:#92400E;font-weight:600">join the upgrade waitlist</a>`
-      : `<i class="ti ti-sparkles"></i> <strong>${days} days</strong> remaining in your free Novara trial.`;
+    banner.innerHTML = `<i class="ti ti-sparkles"></i> You are on your <strong>free trial week</strong>. <a href="#" onclick="showWaitlistModal()" style="color:#92400E;font-weight:600">Join the upgrade waitlist</a> to continue after this week.`;
     sc.insertBefore(banner, sc.querySelector('.scroll-area') || sc.firstChild);
   });
 }
@@ -128,8 +127,8 @@ function showTrialExpiredOverlay() {
   overlay.innerHTML = `
     <div class="trial-expired-card">
       <div style="font-size:48px">🌊</div>
-      <h2>Your trial has ended</h2>
-      <p>Thank you for exploring Novara. Join our upgrade waitlist and we'll notify you the moment full access is available. Your milestones and memories are safe.</p>
+      <h2>Your free week is complete</h2>
+      <p>You've experienced Novara's personalised plan for your child. Join our upgrade waitlist to continue every week — your milestones, moments, and progress are all safe.</p>
       <button class="btn-primary full-width" onclick="showWaitlistModal()"><i class="ti ti-crown"></i> Join the upgrade waitlist</button>
       <p style="font-size:12px;color:var(--color-text-secondary);margin-top:12px">Your data is safe and will be fully restored when you upgrade.</p>
     </div>`;
@@ -401,8 +400,15 @@ function verifyCode() {
 }
 
 function skipVerification() {
-  // Allow skip — email stored but not verified
-  onboardData.email = document.getElementById('onboard-email-input')?.value.trim() || '';
+  // Email must be entered — skip only bypasses the code check, not the email itself
+  const email = document.getElementById('onboard-email-input')?.value.trim();
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    // They're on the verify screen — go back and force email entry
+    showScreen('onboard-email');
+    showEmailError('Please enter a valid email address before continuing.');
+    return;
+  }
+  onboardData.email = email;
   completeOnboarding();
 }
 
@@ -514,6 +520,7 @@ async function submitPIN() {
     session.pinVerified = true;
     session.trialStartDate = family.trial_start_date;
     session.isPaid = family.is_paid || false;
+    session.trialPlanUsed = family.trial_plan_used || false;
     document.getElementById('pin-input').value = '';
     await loadChildData();
 
@@ -832,11 +839,20 @@ async function generatePlan() {
     return;
   }
 
-  // Ensure availability confirmed for this week
-  if (!session.weekAvailability) {
+  // Ensure availability confirmed for this week — always read fresh from DB
+  let freshAvail = null;
+  try {
+    const availRows = await db.select('weekly_availability',
+      `?family_id=eq.${session.familyId}&week_number=eq.${session.weekNumber}`);
+    freshAvail = availRows?.[0] || null;
+  } catch(e) { console.warn('Could not load availability:', e); }
+
+  if (!freshAvail) {
     showWeeklyAvailabilityCheck();
     return;
   }
+  session.weekAvailability = freshAvail;
+  saveSession();
 
   document.getElementById('plan-empty').style.display = 'none';
   document.getElementById('plan-list').innerHTML = '';
@@ -922,6 +938,12 @@ RULES:
       age_months: ageMonths,
       activities: session.plan,
     });
+
+    // Mark trial plan as used for non-paid users
+    if (!session.isPaid) {
+      await db.update('families', { trial_plan_used: true }, `?id=eq.${session.familyId}`);
+      session.trialPlanUsed = true;
+    }
 
     saveSession();
     renderPlan();
@@ -1081,13 +1103,11 @@ async function quickMark(id, status) {
     const dom = session.domains.find(d => d.id === act.domain);
     if (dom) { dom.pct = Math.min(100, dom.pct + 14); dom.last = act.title; }
     session.stats.streak++;
-    // ── BUG FIX: Save domain progress to DB immediately ──
-    await db.upsert('domain_progress', {
-      child_id: session.childId,
-      domain: act.domain,
-      pct: dom?.pct || 0,
-      last_activity: act.title
-    });
+    // ── BUG FIX: Use update with explicit filter — prevents duplicate row insertion ──
+    await db.update('domain_progress',
+      { pct: dom?.pct || 0, last_activity: act.title },
+      `?child_id=eq.${session.childId}&domain=eq.${act.domain}`
+    );
     await db.update('child_stats', { streak: session.stats.streak }, `?child_id=eq.${session.childId}`);
   }
   // ── BUG FIX: Save full plan with updated statuses to DB ──

@@ -9,6 +9,50 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" />
   <link rel="stylesheet" href="style.css" />
   <style>
+    /* ── ONBOARDING SCREEN TEXT LEGIBILITY FIX ────── */
+    /* Ensures all text on light-background onboard screens is dark and readable */
+    #screen-onboard-email .onboard-title,
+    #screen-onboard-email .onboard-sub,
+    #screen-onboard-email .onboard-step,
+    #screen-onboard-verify .onboard-title,
+    #screen-onboard-verify .onboard-sub,
+    #screen-onboard-verify .onboard-step,
+    #screen-onboard-availability .onboard-title,
+    #screen-onboard-availability .onboard-sub,
+    #screen-onboard-availability p,
+    #screen-onboard-location .onboard-title,
+    #screen-onboard-location .onboard-sub,
+    #screen-onboard-location .onboard-step,
+    #screen-onboard-child .onboard-title,
+    #screen-onboard-child .onboard-sub,
+    #screen-onboard-child .onboard-step,
+    #screen-onboard-languages .onboard-title,
+    #screen-onboard-languages .onboard-sub,
+    #screen-onboard-languages .onboard-step,
+    #screen-onboard-parents .onboard-title,
+    #screen-onboard-parents .onboard-sub,
+    #screen-onboard-parents .onboard-step,
+    #screen-onboard-pin .onboard-title,
+    #screen-onboard-pin .onboard-sub,
+    #screen-onboard-pin .onboard-step,
+    #screen-onboard-welcome .onboard-sub {
+      color: #0A2540 !important;
+    }
+    #screen-onboard-email .onboard-title,
+    #screen-onboard-verify .onboard-title,
+    #screen-onboard-availability .onboard-title {
+      color: #0A2540 !important;
+      font-family: 'DM Serif Display', serif;
+    }
+    .verify-display { color: #0E7490 !important; }
+    .onboard-input-note { color: #64748B !important; }
+    .skip-link { color: #94A3B8 !important; }
+    #screen-onboard-availability #avail-week-label { color: #0E7490; }
+    /* Availability day cards — ensure contrast */
+    .avail-day-name { color: #0A2540 !important; }
+    .avail-slot-pill { color: #475569 !important; }
+    .avail-slot-pill.selected { color: #0E7490 !important; }
+
     /* ── TRIAL BANNER ──────────────────────────────── */
     .trial-banner {
       background: linear-gradient(135deg,#FEF3C7,#FFF7ED);
@@ -707,7 +751,7 @@
 </div>
 
 </div>
-<script src="config.js?v=5"></script>
-<script src="app.js?v=5"></script>
+<script src="config.js?v=6"></script>
+<script src="app.js?v=6"></script>
 </body>
 </html>
