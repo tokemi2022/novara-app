@@ -429,13 +429,26 @@ async function completeOnboarding() {
     const today = new Date().toISOString().split('T')[0];
 
     // 1. Create family
-    const families = await db.insert('families', {
-      pin_hash: onboardData.pin,
-      email: onboardData.email || null,
-      email_verified: false,
-      trial_start_date: today,
-      is_paid: false,
-    });
+    let families;
+    try {
+      families = await db.insert('families', {
+        pin_hash: onboardData.pin,
+        email: onboardData.email || null,
+        email_verified: false,
+        trial_start_date: today,
+        is_paid: false,
+        trial_plan_used: false,
+      });
+    } catch(insertErr) {
+      if (insertErr.message.includes('23505') || insertErr.message.includes('duplicate')) {
+        // Email already registered — tell the parent clearly
+        if (btn) { btn.disabled = false; btn.textContent = 'Start journey'; }
+        showScreen('onboard-email');
+        showEmailError('This email already has a Novara account. Please use a different email, or go back to log in with your existing PIN.');
+        return;
+      }
+      throw insertErr;
+    }
     const family = Array.isArray(families) ? families[0] : families;
     const familyId = family.id;
 
