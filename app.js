@@ -319,7 +319,7 @@ function showScreen(id) {
   if (el) el.classList.add('active');
   const noNav = ['splash','pin','onboard-welcome','onboard-location','onboard-child',
                  'onboard-languages','onboard-parents','onboard-pin','onboard-consent',
-                 'onboard-email','onboard-verify','onboard-availability'];
+                 'onboard-email','onboard-verify','onboard-availability','join-family'];
   const nav = document.getElementById('bottom-nav');
   if (nav) nav.style.display = noNav.includes(id) ? 'none' : 'flex';
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
@@ -567,6 +567,94 @@ function showEmailError(msg) {
 
 function showVerifyError(msg) {
   const el = document.getElementById('onboard-verify-error');
+  if (el) { el.textContent = msg; el.style.display = 'block'; }
+}
+
+// ===== JOIN EXISTING FAMILY ACCOUNT (second parent on new device) =====
+async function joinFamilyAccount() {
+  const email = document.getElementById('join-email-input')?.value.trim();
+  const pin   = document.getElementById('join-pin-input')?.value.trim();
+  const errEl = document.getElementById('join-error');
+
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    showJoinError('Please enter a valid email address.'); return;
+  }
+  if (!pin || pin.length !== 4) {
+    showJoinError('Please enter the 4-digit family PIN.'); return;
+  }
+
+  const btn = document.querySelector('#screen-join-family .btn-primary');
+  if (btn) { btn.disabled = true; btn.textContent = 'Looking up account…'; }
+
+  try {
+    // Look up family by email
+    const families = await db.select('families', `?email=eq.${encodeURIComponent(email)}`);
+    if (!families || families.length === 0) {
+      showJoinError('No Novara account found with that email address.'); 
+      if (btn) { btn.disabled = false; btn.textContent = 'Access our account'; }
+      return;
+    }
+
+    const family = families[0];
+
+    // Verify PIN
+    if (pin !== family.pin_hash) {
+      showJoinError('Incorrect PIN. Please try again.');
+      if (btn) { btn.disabled = false; btn.textContent = 'Access our account'; }
+      return;
+    }
+
+    // Check device limit
+    const deviceCheck = await registerDevice(family.id);
+    if (!deviceCheck.allowed) {
+      showJoinError(`This account already has ${NOVARA.maxDevices} registered devices. Ask your co-parent to remove a device in Settings → Manage devices.`);
+      if (btn) { btn.disabled = false; btn.textContent = 'Access our account'; }
+      return;
+    }
+
+    // Load the child for this family
+    const children = await db.select('children', `?family_id=eq.${family.id}&limit=1`);
+    if (!children || children.length === 0) {
+      showJoinError('Account found but no child registered. Please contact support.');
+      if (btn) { btn.disabled = false; btn.textContent = 'Access our account'; }
+      return;
+    }
+
+    const child = children[0];
+
+    // Set session — exactly same as PIN login
+    session.familyId       = family.id;
+    session.childId        = child.id;
+    session.pinVerified    = true;
+    session.trialStartDate = family.trial_start_date;
+    session.isPaid         = NOVARA.devMode ? true : (family.is_paid || false);
+    session.trialPlanUsed  = NOVARA.devMode ? false : (family.trial_plan_used || false);
+    session.nickname       = family.nickname || generateNickname();
+    session.consentAgreed  = !!family.consent_agreed_at;
+    saveSession();
+
+    // Load all child data and go home
+    await loadChildData();
+
+    // Check if availability confirmed for this week
+    const hasAvail = await db.select('weekly_availability',
+      `?family_id=eq.${family.id}&week_number=eq.${session.weekNumber}`);
+    if (!hasAvail || hasAvail.length === 0) {
+      showWeeklyAvailabilityCheck();
+    } else {
+      session.weekAvailability = hasAvail[0];
+      saveSession();
+      showScreen('home');
+    }
+
+  } catch(e) {
+    showJoinError('Error: ' + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = 'Access our account'; }
+  }
+}
+
+function showJoinError(msg) {
+  const el = document.getElementById('join-error');
   if (el) { el.textContent = msg; el.style.display = 'block'; }
 }
 

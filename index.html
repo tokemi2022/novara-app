@@ -340,6 +340,19 @@
       background: none; border: none; cursor: pointer; margin-top: 12px;
     }
 
+    /* ── JOIN FAMILY ───────────────────────────────── */
+    .join-family-divider {
+      display: flex; align-items: center; gap: 12px;
+      margin: 20px 0 12px; width: 100%;
+    }
+    .join-family-divider::before,
+    .join-family-divider::after {
+      content: ''; flex: 1; height: 1px; background: #E2E8F0;
+    }
+    .join-family-divider span {
+      font-size: 12px; color: #94A3B8; white-space: nowrap;
+    }
+
     /* ── WAITLIST MODAL ────────────────────────────── */
     .waitlist-perks { background: #E0F7FA; border-radius: 10px; padding: 12px 16px; margin: 12px 0; }
     .waitlist-perk { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #0D4A6B; padding: 4px 0; }
@@ -378,6 +391,30 @@
       <span><strong>14-day free trial</strong> — no payment needed to get started</span>
     </div>
     <button class="btn-primary full-width" onclick="startOnboarding()">Get started <i class="ti ti-arrow-right"></i></button>
+    <div class="join-family-divider">
+      <span>Already have an account?</span>
+    </div>
+    <button class="btn-secondary full-width" onclick="showScreen('join-family')">
+      <i class="ti ti-users"></i> Join my family's account
+    </button>
+  </div>
+</div>
+
+<!-- ===== JOIN FAMILY ACCOUNT ===== -->
+<div id="screen-join-family" class="screen">
+  <div class="onboard-screen">
+    <div class="onboard-icon">👨‍👩‍👧</div>
+    <h2 class="onboard-title" style="color:#0A2540">Join your family account</h2>
+    <p class="onboard-sub" style="color:#334155">Enter the email and PIN used when your family registered on Novara.</p>
+    <input id="join-email-input" type="email" placeholder="Family email address" class="onboard-input" style="background:#fff;border:1.5px solid #0E7490;color:#0A2540" />
+    <input id="join-pin-input" type="password" inputmode="numeric" maxlength="4" placeholder="Family 4-digit PIN" class="onboard-input pin-style" style="margin-top:8px;background:#fff;border:1.5px solid #0E7490;color:#0A2540" />
+    <p id="join-error" class="pin-error" style="display:none"></p>
+    <button class="btn-primary full-width" style="margin-top:16px" onclick="joinFamilyAccount()">
+      <i class="ti ti-login"></i> Access our account
+    </button>
+    <button class="btn-secondary full-width" style="margin-top:8px" onclick="showScreen('onboard-welcome')">
+      <i class="ti ti-arrow-left"></i> Back
+    </button>
   </div>
 </div>
 
@@ -969,7 +1006,7 @@
 </div>
 
 </div>
-<script src="config.js?v=17"></script>
-<script src="app.js?v=17"></script>
+<script src="config.js?v=18"></script>
+<script src="app.js?v=18"></script>
 </body>
 </html>
