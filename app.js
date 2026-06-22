@@ -886,16 +886,17 @@ async function loadChildData() {
       session.domains = NOVARA.domains.map(d => ({ ...d, pct: 0, last: 'Not started yet' }));
     }
 
-    // ── BUG FIX: Load plan from DB — activity statuses come from DB not session cache ──
+    // Always load plan fresh from DB — order by id desc to get most recent row
+    // (guards against duplicate rows before unique constraint was added)
     const plans = await db.select('weekly_plans',
-      `?child_id=eq.${session.childId}&week_number=eq.${session.weekNumber}`);
+      `?child_id=eq.${session.childId}&week_number=eq.${session.weekNumber}&order=id.desc&limit=1`);
     if (plans?.[0]) {
-      // Always use DB version — source of truth for activity statuses
       session.plan = plans[0].activities || [];
     } else {
       session.plan = [];
     }
 
+    // Recalculate done count from actual activity statuses in DB
     session.stats.done = session.plan.filter(a => a.status === 'done').length;
     saveSession();
   } catch(e) {
@@ -1248,12 +1249,7 @@ function openActivity(id) {
   if (act.status === 'pending' && !act.timer_started_at) {
     act.timer_started_at = Date.now();
     // Save timer start to DB immediately
-    db.upsert('weekly_plans', {
-      child_id: session.childId,
-      week_number: session.weekNumber,
-      age_months: session.ageMonths,
-      activities: session.plan
-    }).catch(() => {});
+    savePlanToDB().catch(() => {});
     saveSession();
   }
 
@@ -1340,12 +1336,38 @@ async function quickMark(id, status) {
   const act = session.plan.find(a => a.id === id);
   if (!act || act.status !== 'pending') return;
 
+  // ── Double-mark protection: verify from DB before proceeding ──
+  // Prevents second parent marking an activity already done by first parent
+  const freshPlans = await db.select('weekly_plans',
+    `?child_id=eq.${session.childId}&week_number=eq.${session.weekNumber}&order=id.desc&limit=1`);
+  if (freshPlans?.[0]) {
+    const freshAct = (freshPlans[0].activities || []).find(a => a.id === id);
+    if (freshAct && freshAct.status !== 'pending') {
+      // Already marked by the other parent — sync session and re-render
+      session.plan = freshPlans[0].activities;
+      session.stats.done = session.plan.filter(a => a.status === 'done').length;
+      saveSession();
+      renderPlan();
+      renderHome();
+      alert(`This activity was already marked as "${freshAct.status}" by ${freshAct.marked_by || 'your co-parent'}.`);
+      return;
+    }
+    // Sync latest plan from DB before marking
+    session.plan = freshPlans[0].activities;
+    const syncedAct = session.plan.find(a => a.id === id);
+    if (!syncedAct || syncedAct.status !== 'pending') return;
+  }
+
+  // Work with the freshly synced activity
+  const freshAct2 = session.plan.find(a => a.id === id);
+  if (!freshAct2) return;
+
   // ── Timer check for 'done' — must have spent 50% of duration ──
   if (status === 'done') {
-    const elapsed = act.timer_started_at
-      ? Math.floor((Date.now() - act.timer_started_at) / 1000)
+    const elapsed = freshAct2.timer_started_at
+      ? Math.floor((Date.now() - freshAct2.timer_started_at) / 1000)
       : 0;
-    const required = getRequiredSeconds(act.duration);
+    const required = getRequiredSeconds(freshAct2.duration);
     if (elapsed < required) {
       const remaining = Math.ceil((required - elapsed) / 60);
       alert(`Keep going! Spend at least ${remaining} more minute${remaining !== 1 ? 's' : ''} on this activity before marking it done.`);
@@ -1354,18 +1376,18 @@ async function quickMark(id, status) {
   }
 
   const markedBy = session.parents[0]?.display_name || 'Parent';
-  act.status = status;
-  act.marked_by = markedBy;
-  act.marked_at = new Date().toISOString();
+  freshAct2.status   = status;
+  freshAct2.marked_by  = markedBy;
+  freshAct2.marked_at  = new Date().toISOString();
 
   if (status === 'done') {
     session.stats.done++;
-    const dom = session.domains.find(d => d.id === act.domain);
-    if (dom) { dom.pct = Math.min(100, dom.pct + 14); dom.last = act.title; }
+    const dom = session.domains.find(d => d.id === freshAct2.domain);
+    if (dom) { dom.pct = Math.min(100, dom.pct + 14); dom.last = freshAct2.title; }
     session.stats.streak++;
     await db.update('domain_progress',
-      { pct: dom?.pct || 0, last_activity: act.title },
-      `?child_id=eq.${session.childId}&domain=eq.${act.domain}`
+      { pct: dom?.pct || 0, last_activity: freshAct2.title },
+      `?child_id=eq.${session.childId}&domain=eq.${freshAct2.domain}`
     );
     await db.update('child_stats',
       { streak: session.stats.streak },
@@ -1375,12 +1397,7 @@ async function quickMark(id, status) {
     await updateLeaderboard();
   }
 
-  await db.upsert('weekly_plans', {
-    child_id: session.childId,
-    week_number: session.weekNumber,
-    age_months: session.ageMonths,
-    activities: session.plan
-  });
+  await savePlanToDB();
   saveSession();
   renderPlan();
   renderHome();
@@ -1393,6 +1410,17 @@ function getRequiredSeconds(duration) {
   if (!match) return 0;
   const mins = parseInt(match[1]);
   return Math.floor(mins * 0.5 * 60); // 50% of lower bound in seconds
+}
+
+// ── PLAN PERSISTENCE HELPER ──────────────────────────────────────────────
+// Always uses UPDATE with explicit filter — never upsert which can insert
+// a duplicate row if the unique constraint is missing, causing stale loads.
+async function savePlanToDB() {
+  await db.update(
+    'weekly_plans',
+    { activities: session.plan },
+    `?child_id=eq.${session.childId}&week_number=eq.${session.weekNumber}`
+  );
 }
 
 function openMilestoneFromActivity(id) {
