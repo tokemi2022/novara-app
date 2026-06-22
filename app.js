@@ -1524,20 +1524,18 @@ async function renderProgress() {
 
 // ===== CHAT (trial-gated) =====
 function renderChatGate() {
+  const gateEl = document.getElementById('chat-gate');
+  const listEl = document.getElementById('chat-messages-list');
+  const barEl  = document.querySelector('#screen-chat .chat-input-bar');
+
   if (!canUseChat()) {
-    const screen = document.getElementById('screen-chat');
-    if (screen) {
-      const msgList = document.getElementById('chat-messages-list');
-      if (msgList) msgList.innerHTML = '';
-      const gate = document.getElementById('chat-gate');
-      if (gate) gate.style.display = 'flex';
-      const bar = document.querySelector('.chat-input-bar');
-      if (bar) bar.style.display = 'none';
-    }
+    if (gateEl) gateEl.style.display = 'flex';
+    if (listEl) listEl.innerHTML = '';
+    if (barEl)  barEl.style.display = 'none';
     return;
   }
-  document.getElementById('chat-gate') && (document.getElementById('chat-gate').style.display = 'none');
-  document.querySelector('.chat-input-bar') && (document.querySelector('.chat-input-bar').style.display = 'flex');
+  if (gateEl) gateEl.style.display = 'none';
+  if (barEl)  barEl.style.display  = 'flex';
   populateParentSelects();
   renderChat();
 }
