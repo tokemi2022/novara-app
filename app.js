@@ -210,7 +210,7 @@ function renderLeaderboardList(rows, scoreKey, type) {
 // session.trialPlanUsed = true once the first plan has been generated
 
 function hasUsedTrialPlan() {
-  if (NOVARA.devMode) return false; // dev mode: never block
+  if (NOVARA.devMode || session.isPaid) return false; // never block in devMode or paid
   return session.trialPlanUsed === true;
 }
 
@@ -1109,8 +1109,8 @@ RULES:
       activities: session.plan,
     });
 
-    // Mark trial plan as used for non-paid users
-    if (!session.isPaid) {
+    // Mark trial plan as used for non-paid users — never in devMode
+    if (!NOVARA.devMode && !session.isPaid) {
       await db.update('families', { trial_plan_used: true }, `?id=eq.${session.familyId}`);
       session.trialPlanUsed = true;
     }
