@@ -1752,6 +1752,20 @@ function populateParentSelects() {
   });
 }
 
+function logOut() {
+  if (confirm('Log out of Novara? Your data stays safe — just enter your PIN to log back in.')) {
+    // Clear pin verification but keep family session so PIN screen shows
+    session.pinVerified = false;
+    if (NOVARA.devMode) {
+      session.isPaid = true;
+      session.trialPlanUsed = false;
+    }
+    saveSession();
+    renderPinScreen();
+    showScreen('pin');
+  }
+}
+
 function resetAll() {
   if (confirm('Delete ALL data? This cannot be undone.')) {
     localStorage.removeItem(SESSION_KEY);
