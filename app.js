@@ -108,27 +108,33 @@ function calcNovaraScore(done, milestones, streak) {
 async function updateLeaderboard() {
   if (!session.familyId || !session.nickname) return;
   try {
-    const done      = session.stats.done;
-    const miles     = session.stats.milestones;
-    const streak    = session.stats.streak;
-    const weekly    = calcNovaraScore(done, miles, streak);
+    // Always read fresh stats from DB to ensure accuracy
+    const statsRows = await db.select('child_stats', `?child_id=eq.${session.childId}`);
+    const s = statsRows?.[0];
+    const done    = s ? session.stats.done    : 0; // use session for done (just updated)
+    const miles   = s ? (s.total_milestones || 0) : 0;
+    const streak  = s ? (s.streak || 0)           : 0;
+    const weekly  = calcNovaraScore(done, miles, streak);
 
-    // Get existing all-time score
+    // Get existing all-time best
     const existing = await db.select('leaderboard_scores',
       `?family_id=eq.${session.familyId}&order=alltime_score.desc&limit=1`);
     const prevAllTime = existing?.[0]?.alltime_score || 0;
     const alltime = Math.max(prevAllTime, weekly);
 
-    await db.upsert('leaderboard_scores', {
-      family_id:      session.familyId,
-      nickname:       session.nickname,
-      week_number:    session.weekNumber,
-      weekly_score:   weekly,
-      alltime_score:  alltime,
+    // Delete + insert to avoid duplicate rows (same pattern as savePlanToDB)
+    await db.delete('leaderboard_scores',
+      `?family_id=eq.${session.familyId}&week_number=eq.${session.weekNumber}`);
+    await db.insert('leaderboard_scores', {
+      family_id:       session.familyId,
+      nickname:        session.nickname,
+      week_number:     session.weekNumber,
+      weekly_score:    weekly,
+      alltime_score:   alltime,
       activities_done: done,
       milestones_done: miles,
       streak,
-      updated_at:     new Date().toISOString(),
+      updated_at:      new Date().toISOString(),
     });
   } catch(e) { console.warn('Leaderboard update failed (non-blocking):', e.message); }
 }
@@ -230,9 +236,14 @@ function canSeeFullHistory() { return NOVARA.devMode || session.isPaid; }
 
 function renderTrialBanner() {
   document.querySelectorAll('.trial-banner').forEach(b => b.remove());
-  // No banner in dev mode or for paid users
-  if (NOVARA.devMode || session.isPaid) return;
-
+  // Hard enforce devMode every time this runs
+  if (NOVARA.devMode) {
+    session.isPaid = true;
+    session.trialPlanUsed = false;
+    document.getElementById('trial-expired-overlay')?.remove();
+    return;
+  }
+  if (session.isPaid) return;
   if (hasUsedTrialPlan()) { showTrialExpiredOverlay(); return; }
 
   const screens = ['screen-home','screen-plan','screen-progress','screen-moments','screen-settings'];
