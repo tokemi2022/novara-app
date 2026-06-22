@@ -15,8 +15,10 @@ let session = {
   ageMonths: 0,
   trialStartDate: null,
   isPaid: false,
-  trialPlanUsed: false,   // true once the family's first free plan has been generated
+  trialPlanUsed: false,
   weekAvailability: null,
+  nickname: null,       // ocean-themed family nickname
+  consentAgreed: false, // legal consent confirmed at registration
 };
 
 function saveSession() {
@@ -76,38 +78,158 @@ async function resetDevice(familyId) {
   localStorage.removeItem('novara_device_id');
 }
 
+// ===== NICKNAME GENERATOR =====
+const NICKNAME_ADJECTIVES = [
+  'Bright','Swift','Bold','Gentle','Brave','Warm','Deep','Calm',
+  'Joyful','Tender','Radiant','Steady','Vivid','Kind','Fierce','Loving'
+];
+const NICKNAME_NOUNS = [
+  'Dolphins','Turtles','Whales','Seahorses','Rays','Otters',
+  'Corals','Waves','Tides','Currents','Shores','Pearls'
+];
+
+function generateNickname() {
+  const adj  = NICKNAME_ADJECTIVES[Math.floor(Math.random() * NICKNAME_ADJECTIVES.length)];
+  const noun = NICKNAME_NOUNS[Math.floor(Math.random() * NICKNAME_NOUNS.length)];
+  return `${adj} ${noun}`;
+}
+
+// ===== LEADERBOARD =====
+// Novara Score = (activities_done × 10) + (milestones × 15) + (streak × 5)
+function calcNovaraScore(done, milestones, streak) {
+  return (done * 10) + (milestones * 15) + (streak * 5);
+}
+
+async function updateLeaderboard() {
+  if (!session.familyId || !session.nickname) return;
+  try {
+    const done      = session.stats.done;
+    const miles     = session.stats.milestones;
+    const streak    = session.stats.streak;
+    const weekly    = calcNovaraScore(done, miles, streak);
+
+    // Get existing all-time score
+    const existing = await db.select('leaderboard_scores',
+      `?family_id=eq.${session.familyId}&order=alltime_score.desc&limit=1`);
+    const prevAllTime = existing?.[0]?.alltime_score || 0;
+    const alltime = Math.max(prevAllTime, weekly);
+
+    await db.upsert('leaderboard_scores', {
+      family_id:      session.familyId,
+      nickname:       session.nickname,
+      week_number:    session.weekNumber,
+      weekly_score:   weekly,
+      alltime_score:  alltime,
+      activities_done: done,
+      milestones_done: miles,
+      streak,
+      updated_at:     new Date().toISOString(),
+    });
+  } catch(e) { console.warn('Leaderboard update failed (non-blocking):', e.message); }
+}
+
+function switchLbTab(tab, el) {
+  document.querySelectorAll('.lb-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.lb-panel').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById(`lb-panel-${tab}`)?.classList.add('active');
+}
+
+async function renderLeaderboard() {
+  const weekEl    = document.getElementById('leaderboard-weekly-list');
+  const alltimeEl = document.getElementById('leaderboard-alltime-list');
+  const myWeekEl  = document.getElementById('leaderboard-my-position');
+  if (!weekEl) return;
+
+  weekEl.innerHTML    = `<div class="lb-loading"><div class="spinner"></div></div>`;
+  alltimeEl.innerHTML = `<div class="lb-loading"><div class="spinner"></div></div>`;
+
+  try {
+    // Weekly top 10
+    const weekly = await db.select('leaderboard_scores',
+      `?week_number=eq.${session.weekNumber}&order=weekly_score.desc&limit=10`);
+
+    // All-time top 10 — get best score per family
+    const alltime = await db.select('leaderboard_scores',
+      `?order=alltime_score.desc&limit=10`);
+
+    // My position this week
+    const allWeekly = await db.select('leaderboard_scores',
+      `?week_number=eq.${session.weekNumber}&order=weekly_score.desc`);
+    const myPos = allWeekly?.findIndex(r => r.family_id === session.familyId);
+
+    weekEl.innerHTML    = renderLeaderboardList(weekly, 'weekly_score', 'weekly');
+    alltimeEl.innerHTML = renderLeaderboardList(alltime, 'alltime_score', 'alltime');
+
+    if (myWeekEl) {
+      if (myPos === -1 || myPos === undefined) {
+        myWeekEl.innerHTML = session.isPaid || NOVARA.devMode
+          ? `<div class="lb-my-pos-card">Your family hasn't scored this week yet — generate and complete your plan!</div>`
+          : `<div class="lb-my-pos-card lb-unranked"><i class="ti ti-lock"></i> Complete your free trial week to appear on the leaderboard</div>`;
+      } else {
+        const myRow = allWeekly[myPos];
+        myWeekEl.innerHTML = `
+          <div class="lb-my-pos-card">
+            <span class="lb-pos">#${myPos + 1}</span>
+            <span class="lb-nick">${myRow.nickname} <span style="font-size:11px;opacity:0.7">(You)</span></span>
+            <span class="lb-score">${myRow.weekly_score} pts</span>
+          </div>`;
+      }
+    }
+  } catch(e) {
+    weekEl.innerHTML = `<p style="padding:16px;color:#94A3B8;text-align:center">Could not load leaderboard</p>`;
+  }
+}
+
+function renderLeaderboardList(rows, scoreKey, type) {
+  if (!rows || rows.length === 0) {
+    return `<div class="lb-empty"><i class="ti ti-trophy"></i><p>No scores yet this ${type === 'weekly' ? 'week' : 'time'}.<br>Be the first!</p></div>`;
+  }
+  const medals = ['🥇','🥈','🥉'];
+  return rows.map((r, i) => {
+    const isMe = r.family_id === session.familyId;
+    return `
+      <div class="lb-row ${isMe ? 'lb-row-me' : ''}">
+        <div class="lb-rank">${medals[i] || `#${i + 1}`}</div>
+        <div class="lb-info">
+          <div class="lb-nick">${r.nickname}${isMe ? ' <span class="lb-you-badge">You</span>' : ''}</div>
+          <div class="lb-meta">${r.activities_done} activities · ${r.milestones_done} milestones · ${r.streak} day streak</div>
+        </div>
+        <div class="lb-score-val">${r[scoreKey]}<span style="font-size:10px;opacity:0.6"> pts</span></div>
+      </div>`;
+  }).join('');
+}
+
 // ===== TRIAL HELPERS =====
 // Trial = feature-based: 1 free week of plan generation (not time-based)
-// session.trialPlanUsed = true once the first plan has been generated and the week is complete
+// session.trialPlanUsed = true once the first plan has been generated
 
 function hasUsedTrialPlan() {
-  // Trial plan is "used" when a plan has been generated AND marked as trial_plan_used on the family
+  if (NOVARA.devMode) return false; // dev mode: never block
   return session.trialPlanUsed === true;
 }
 
 function isTrialActive() {
-  // Paid users always active; trial users active until they've used their one free week plan
+  if (NOVARA.devMode) return true;
   return session.isPaid || !hasUsedTrialPlan();
 }
 
-// Trial feature gates
 function canGeneratePlan() {
-  if (session.isPaid) return true;
-  // Trial: can generate only if no plan has been generated yet for this family
+  if (NOVARA.devMode || session.isPaid) return true;
   return !hasUsedTrialPlan();
 }
 
-function canUseChat() { return session.isPaid; }
-function canUseShopping() { return session.isPaid; }
-function canSeeFullHistory() { return session.isPaid; }
+function canUseChat()        { return NOVARA.devMode || session.isPaid; }
+function canUseShopping()    { return NOVARA.devMode || session.isPaid; }
+function canSeeFullHistory() { return NOVARA.devMode || session.isPaid; }
 
 function renderTrialBanner() {
   document.querySelectorAll('.trial-banner').forEach(b => b.remove());
-  if (session.isPaid) return;
+  // No banner in dev mode or for paid users
+  if (NOVARA.devMode || session.isPaid) return;
 
   if (hasUsedTrialPlan()) { showTrialExpiredOverlay(); return; }
 
-  // Show a simple "trial" label — no countdown
   const screens = ['screen-home','screen-plan','screen-progress','screen-moments','screen-settings'];
   screens.forEach(sid => {
     const sc = document.getElementById(sid);
@@ -191,20 +313,21 @@ function showScreen(id) {
   const el = document.getElementById('screen-' + id);
   if (el) el.classList.add('active');
   const noNav = ['splash','pin','onboard-welcome','onboard-location','onboard-child',
-                 'onboard-languages','onboard-parents','onboard-pin','onboard-email',
-                 'onboard-verify','onboard-availability'];
+                 'onboard-languages','onboard-parents','onboard-pin','onboard-consent',
+                 'onboard-email','onboard-verify','onboard-availability'];
   const nav = document.getElementById('bottom-nav');
   if (nav) nav.style.display = noNav.includes(id) ? 'none' : 'flex';
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   const nb = document.querySelector(`[data-screen="${id}"]`);
   if (nb) nb.classList.add('active');
-  if (id === 'home')     { renderHome(); renderTrialBanner(); }
-  if (id === 'plan')     renderPlan();
-  if (id === 'progress') renderProgress();
-  if (id === 'moments')  renderMoments();
-  if (id === 'settings') renderSettings();
-  if (id === 'chat')     renderChatGate();
-  if (id === 'shopping') renderShoppingGate();
+  if (id === 'home')        { renderHome(); renderTrialBanner(); }
+  if (id === 'plan')        renderPlan();
+  if (id === 'progress')    renderProgress();
+  if (id === 'moments')     renderMoments();
+  if (id === 'settings')    renderSettings();
+  if (id === 'chat')        renderChatGate();
+  if (id === 'shopping')    renderShoppingGate();
+  if (id === 'leaderboard') renderLeaderboard();
 }
 
 // ===== ONBOARDING =====
@@ -326,7 +449,27 @@ function saveOnboardPin() {
   if (p1.length !== 4 || !/^\d{4}$/.test(p1)) { showOError('PIN must be exactly 4 digits'); return; }
   if (p1 !== p2) { showOError('PINs do not match'); return; }
   onboardData.pin = p1;
-  // Move to email step
+  // Move to consent screen
+  showScreen('onboard-consent');
+}
+
+function validateConsent() {
+  const c1 = document.getElementById('consent-check-1')?.checked;
+  const c2 = document.getElementById('consent-check-2')?.checked;
+  const c3 = document.getElementById('consent-check-3')?.checked;
+  const btn = document.getElementById('consent-agree-btn');
+  if (btn) btn.disabled = !(c1 && c2 && c3);
+}
+
+function proceedFromConsent() {
+  const c1 = document.getElementById('consent-check-1')?.checked;
+  const c2 = document.getElementById('consent-check-2')?.checked;
+  const c3 = document.getElementById('consent-check-3')?.checked;
+  if (!c1 || !c2 || !c3) {
+    alert('Please agree to all terms before continuing.');
+    return;
+  }
+  onboardData.consentAgreed = true;
   showScreen('onboard-email');
 }
 
@@ -427,6 +570,7 @@ async function completeOnboarding() {
   if (btn) { btn.disabled = true; btn.textContent = 'Setting up…'; }
   try {
     const today = new Date().toISOString().split('T')[0];
+    const nickname = generateNickname();
 
     // 1. Create family
     let families;
@@ -438,6 +582,9 @@ async function completeOnboarding() {
         trial_start_date: today,
         is_paid: false,
         trial_plan_used: false,
+        nickname,
+        consent_agreed_at: new Date().toISOString(),
+        consent_version: '1.0',
       });
     } catch(insertErr) {
       if (insertErr.message.includes('23505') || insertErr.message.includes('duplicate')) {
@@ -491,7 +638,10 @@ async function completeOnboarding() {
     session.childId = childId;
     session.pinVerified = true;
     session.trialStartDate = today;
-    session.isPaid = false;
+    session.isPaid = NOVARA.devMode ? true : false;
+    session.trialPlanUsed = false;
+    session.nickname = nickname;
+    session.consentAgreed = true;
     saveSession();
 
     // 10. Load data then show availability check before home
@@ -532,8 +682,10 @@ async function submitPIN() {
     }
     session.pinVerified = true;
     session.trialStartDate = family.trial_start_date;
-    session.isPaid = family.is_paid || false;
-    session.trialPlanUsed = family.trial_plan_used || false;
+    session.isPaid = NOVARA.devMode ? true : (family.is_paid || false);
+    session.trialPlanUsed = NOVARA.devMode ? false : (family.trial_plan_used || false);
+    session.nickname = family.nickname || generateNickname();
+    session.consentAgreed = !!family.consent_agreed_at;
     document.getElementById('pin-input').value = '';
     await loadChildData();
 
@@ -1086,23 +1238,95 @@ function openActivity(id) {
   currentActivity = act;
   const dom = session.domains.find(d => d.id === act.domain) || session.domains[0];
   document.getElementById('act-modal-title').textContent = act.title;
+
+  // Start timer if activity is pending and not yet started
+  if (act.status === 'pending' && !act.timer_started_at) {
+    act.timer_started_at = Date.now();
+    // Save timer start to DB immediately
+    db.upsert('weekly_plans', {
+      child_id: session.childId,
+      week_number: session.weekNumber,
+      age_months: session.ageMonths,
+      activities: session.plan
+    }).catch(() => {});
+    saveSession();
+  }
+
   let mats = '';
   if (act.materials?.length > 0) {
     mats = `<div class="act-detail-section"><h4>Materials</h4><ul class="act-materials-list">${act.materials.map(m =>
       `<li>🛒 ${m.name} ${m.required ? '<span style="color:#F97316;font-size:10px">Required</span>' : ''} <a href="${m.link}" target="_blank">Buy →</a></li>`
     ).join('')}</ul></div>`;
   }
+
+  // Timer display
+  const required = getRequiredSeconds(act.duration);
+  const elapsed  = act.timer_started_at ? Math.floor((Date.now() - act.timer_started_at) / 1000) : 0;
+  const remaining = Math.max(0, required - elapsed);
+  const timerHtml = act.status === 'pending' ? `
+    <div class="act-timer-section" id="act-timer-wrap">
+      <div class="act-timer-label">Time with this activity</div>
+      <div class="act-timer-display" id="act-timer-display">${formatTimer(remaining)}</div>
+      <div class="act-timer-sub">${remaining > 0 ? `Spend ${formatTimer(remaining)} more to mark Done` : '✅ Minimum time reached — you can mark this Done!'}</div>
+    </div>` : '';
+
+  // Marked by display
+  const markedByHtml = act.status === 'done'
+    ? `<div class="act-marked-by"><i class="ti ti-check-circle" style="color:#10B981"></i> Completed by <strong>${act.marked_by || 'Parent'}</strong></div>`
+    : act.status === 'skipped'
+    ? `<div class="act-marked-by"><i class="ti ti-circle-off" style="color:#94A3B8"></i> Skipped by <strong>${act.marked_by || 'Parent'}</strong></div>`
+    : '';
+
   document.getElementById('act-modal-body').innerHTML = `
+    ${markedByHtml}
+    ${timerHtml}
     <div class="act-detail-section"><h4>What to do</h4><p>${act.description}</p></div>
     <div class="act-detail-section"><h4>Parent tip</h4><p>${act.tip || 'Follow their lead and keep it joyful!'}</p></div>
     <div class="act-detail-section"><h4>Domain</h4><span class="tag" style="background:${dom?.bg};color:${dom?.color};font-size:13px;padding:4px 12px">${dom?.name}</span></div>
     ${act.platformLink ? `<div class="act-detail-section"><h4>Resource</h4><div class="act-link-row"><i class="ti ti-external-link"></i><a href="${act.platformLink}" target="_blank">${act.platformName || act.platformLink}</a></div></div>` : ''}
     ${mats}`;
+
   document.getElementById('modal-activity').style.display = 'flex';
+
+  // Start live countdown if pending
+  if (act.status === 'pending') startActivityCountdown(id);
+}
+
+let countdownInterval = null;
+
+function startActivityCountdown(id) {
+  if (countdownInterval) clearInterval(countdownInterval);
+  countdownInterval = setInterval(() => {
+    const act = session.plan.find(a => a.id === id);
+    if (!act || act.status !== 'pending') { clearInterval(countdownInterval); return; }
+    const required  = getRequiredSeconds(act.duration);
+    const elapsed   = act.timer_started_at ? Math.floor((Date.now() - act.timer_started_at) / 1000) : 0;
+    const remaining = Math.max(0, required - elapsed);
+    const display   = document.getElementById('act-timer-display');
+    const sub       = document.querySelector('#act-timer-wrap .act-timer-sub');
+    const doneBtn   = document.getElementById('act-modal-done-btn');
+    if (display) display.textContent = formatTimer(remaining);
+    if (sub) sub.textContent = remaining > 0
+      ? `Spend ${formatTimer(remaining)} more to mark Done`
+      : '✅ Minimum time reached — you can mark this Done!';
+    // Enable/disable Done button based on timer
+    if (doneBtn) {
+      doneBtn.disabled = remaining > 0;
+      doneBtn.style.opacity = remaining > 0 ? '0.5' : '1';
+    }
+    if (remaining === 0) clearInterval(countdownInterval);
+  }, 1000);
+}
+
+function formatTimer(seconds) {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
 function markActivity(status) {
   if (!currentActivity) return;
+  if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null; }
   quickMark(currentActivity.id, status);
   closeModal('modal-activity');
 }
@@ -1110,20 +1334,42 @@ function markActivity(status) {
 async function quickMark(id, status) {
   const act = session.plan.find(a => a.id === id);
   if (!act || act.status !== 'pending') return;
+
+  // ── Timer check for 'done' — must have spent 50% of duration ──
+  if (status === 'done') {
+    const elapsed = act.timer_started_at
+      ? Math.floor((Date.now() - act.timer_started_at) / 1000)
+      : 0;
+    const required = getRequiredSeconds(act.duration);
+    if (elapsed < required) {
+      const remaining = Math.ceil((required - elapsed) / 60);
+      alert(`Keep going! Spend at least ${remaining} more minute${remaining !== 1 ? 's' : ''} on this activity before marking it done.`);
+      return;
+    }
+  }
+
+  const markedBy = session.parents[0]?.display_name || 'Parent';
   act.status = status;
+  act.marked_by = markedBy;
+  act.marked_at = new Date().toISOString();
+
   if (status === 'done') {
     session.stats.done++;
     const dom = session.domains.find(d => d.id === act.domain);
     if (dom) { dom.pct = Math.min(100, dom.pct + 14); dom.last = act.title; }
     session.stats.streak++;
-    // ── BUG FIX: Use update with explicit filter — prevents duplicate row insertion ──
     await db.update('domain_progress',
       { pct: dom?.pct || 0, last_activity: act.title },
       `?child_id=eq.${session.childId}&domain=eq.${act.domain}`
     );
-    await db.update('child_stats', { streak: session.stats.streak }, `?child_id=eq.${session.childId}`);
+    await db.update('child_stats',
+      { streak: session.stats.streak },
+      `?child_id=eq.${session.childId}`
+    );
+    // Update leaderboard score
+    await updateLeaderboard();
   }
-  // ── BUG FIX: Save full plan with updated statuses to DB ──
+
   await db.upsert('weekly_plans', {
     child_id: session.childId,
     week_number: session.weekNumber,
@@ -1133,6 +1379,15 @@ async function quickMark(id, status) {
   saveSession();
   renderPlan();
   renderHome();
+}
+
+function getRequiredSeconds(duration) {
+  // 50% of stated duration
+  if (!duration) return 0;
+  const match = duration.match(/(\d+)/);
+  if (!match) return 0;
+  const mins = parseInt(match[1]);
+  return Math.floor(mins * 0.5 * 60); // 50% of lower bound in seconds
 }
 
 function openMilestoneFromActivity(id) {
@@ -1404,13 +1659,16 @@ function renderSettings() {
 
   const trialEl = el('settings-trial-info');
   if (trialEl) {
-    if (session.isPaid) {
+    if (NOVARA.devMode) {
+      trialEl.textContent = '🛠 Dev mode — full access';
+      trialEl.style.color = '#8B5CF6';
+    } else if (session.isPaid) {
       trialEl.textContent = 'Full access — thank you!';
       trialEl.style.color = '#10B981';
     } else {
-      const days = getTrialDaysRemaining();
-      trialEl.textContent = days > 0 ? `${days} trial days remaining` : 'Trial expired';
-      trialEl.style.color = days <= 3 ? '#F97316' : 'var(--color-text-secondary)';
+      const used = hasUsedTrialPlan();
+      trialEl.textContent = used ? 'Trial complete — upgrade to continue' : 'Free trial week active';
+      trialEl.style.color = used ? '#F97316' : 'var(--color-text-secondary)';
     }
   }
 }
