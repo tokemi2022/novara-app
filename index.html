@@ -352,6 +352,21 @@
     .join-family-divider span {
       font-size: 12px; color: #94A3B8; white-space: nowrap;
     }
+    #screen-join-family .onboard-input {
+      background: #FFFFFF !important;
+      border: 1.5px solid #0E7490 !important;
+      color: #0A2540 !important;
+      box-shadow: 0 1px 4px rgba(14,116,144,0.08);
+    }
+    #screen-join-family .onboard-input::placeholder {
+      color: #94A3B8 !important;
+    }
+    #screen-join-family .onboard-title {
+      color: #0A2540 !important;
+    }
+    #screen-join-family .onboard-sub {
+      color: #334155 !important;
+    }
 
     /* ── WAITLIST MODAL ────────────────────────────── */
     .waitlist-perks { background: #E0F7FA; border-radius: 10px; padding: 12px 16px; margin: 12px 0; }
@@ -406,8 +421,8 @@
     <div class="onboard-icon">👨‍👩‍👧</div>
     <h2 class="onboard-title" style="color:#0A2540">Join your family account</h2>
     <p class="onboard-sub" style="color:#334155">Enter the email and PIN used when your family registered on Novara.</p>
-    <input id="join-email-input" type="email" placeholder="Family email address" class="onboard-input" style="background:#fff;border:1.5px solid #0E7490;color:#0A2540" />
-    <input id="join-pin-input" type="password" inputmode="numeric" maxlength="4" placeholder="Family 4-digit PIN" class="onboard-input pin-style" style="margin-top:8px;background:#fff;border:1.5px solid #0E7490;color:#0A2540" />
+    <input id="join-email-input" type="email" placeholder="📧 Family email address (e.g. parent@gmail.com)" class="onboard-input" />
+    <input id="join-pin-input" type="password" inputmode="numeric" maxlength="4" placeholder="🔐 Family 4-digit PIN" class="onboard-input pin-style" style="margin-top:8px" />
     <p id="join-error" class="pin-error" style="display:none"></p>
     <button class="btn-primary full-width" style="margin-top:16px" onclick="joinFamilyAccount()">
       <i class="ti ti-login"></i> Access our account
@@ -1006,7 +1021,7 @@
 </div>
 
 </div>
-<script src="config.js?v=18"></script>
-<script src="app.js?v=18"></script>
+<script src="config.js?v=19"></script>
+<script src="app.js?v=19"></script>
 </body>
 </html>
