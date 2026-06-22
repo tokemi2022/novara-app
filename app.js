@@ -1164,8 +1164,8 @@ Return ONLY a valid JSON array:
     "description": "Exactly what ${parent1} or ${parent2} does with ${childName} — specific, practical, 2 sentences.",
     "language": "${homeLangs.split(',')[0].trim()}"|"${schoolLangs.split(',')[0].trim()}"|"All",
     "tip": "One tip for tired working parents",
-    "platformLink": "https://... (real working URL)",
-    "platformName": "Resource name",
+    "resourcePlatform": "YouTube"|"Spotify"|"Google"|"Pinterest"|"BBC CBeebies"|"Khan Academy Kids"|"Duolingo ABC"|"other platform name",
+    "resourceSearch": "exact search terms the parent should type to find supporting content — e.g. 'Yoruba baby songs for 12 months'",
     "materials": [{"name": "item", "link": "${shopLink}", "required": true}]
   }
 ]
@@ -1177,7 +1177,9 @@ RULES:
 - Include 1 sign language or gesture activity
 - Weekend activities use local ${city} venues or parks where relevant
 - Materials links must use: ${shopLink}
-- All activities age-appropriate for ${ageMonths} months`;
+- All activities age-appropriate for ${ageMonths} months
+- resourceSearch must be specific enough that the first result will be genuinely relevant
+- Never generate URLs — only platform name and search terms`;
 
   try {
     const response = await fetch(NOVARA.workerUrl, {
@@ -1374,7 +1376,21 @@ function openActivity(id) {
     <div class="act-detail-section"><h4>What to do</h4><p>${act.description}</p></div>
     <div class="act-detail-section"><h4>Parent tip</h4><p>${act.tip || 'Follow their lead and keep it joyful!'}</p></div>
     <div class="act-detail-section"><h4>Domain</h4><span class="tag" style="background:${dom?.bg};color:${dom?.color};font-size:13px;padding:4px 12px">${dom?.name}</span></div>
-    ${act.platformLink ? `<div class="act-detail-section"><h4>Resource</h4><div class="act-link-row"><i class="ti ti-external-link"></i><a href="${act.platformLink}" target="_blank">${act.platformName || act.platformLink}</a></div></div>` : ''}
+    ${act.resourcePlatform ? `
+    <div class="act-detail-section">
+      <h4>Where to find supporting content</h4>
+      <div class="act-resource-suggestion">
+        <div class="act-resource-platform">
+          <i class="ti ti-search"></i>
+          <span>Search on <strong>${act.resourcePlatform}</strong></span>
+        </div>
+        <div class="act-resource-query">"${act.resourceSearch}"</div>
+        <a href="https://www.${getPlatformUrl(act.resourcePlatform)}${encodeURIComponent(act.resourceSearch)}"
+           target="_blank" class="act-resource-btn">
+          <i class="ti ti-external-link"></i> Open ${act.resourcePlatform}
+        </a>
+      </div>
+    </div>` : ''}
     ${mats}`;
 
   document.getElementById('modal-activity').style.display = 'flex';
@@ -1491,6 +1507,19 @@ async function quickMark(id, status) {
   saveSession();
   renderPlan();
   renderHome();
+}
+
+function getPlatformUrl(platform) {
+  const p = (platform || '').toLowerCase();
+  if (p.includes('youtube'))    return 'youtube.com/results?search_query=';
+  if (p.includes('spotify'))    return 'open.spotify.com/search/';
+  if (p.includes('pinterest'))  return 'pinterest.com/search/pins/?q=';
+  if (p.includes('cbeebies'))   return 'bbc.co.uk/cbeebies/search?q=';
+  if (p.includes('khan'))       return 'khanacademy.org/search?page_search_query=';
+  if (p.includes('duolingo'))   return 'duolingo.com/';
+  if (p.includes('google'))     return 'google.com/search?q=';
+  // Default to Google for any unrecognised platform
+  return 'google.com/search?q=';
 }
 
 function getRequiredSeconds(duration) {
