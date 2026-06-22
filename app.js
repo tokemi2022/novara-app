@@ -33,6 +33,11 @@ function loadSession() {
     const s = localStorage.getItem(SESSION_KEY);
     if (s) session = { ...session, ...JSON.parse(s), pinVerified: false };
   } catch(e) {}
+  // Apply devMode overrides immediately — never let cached values block dev access
+  if (NOVARA.devMode) {
+    session.isPaid = true;
+    session.trialPlanUsed = false;
+  }
 }
 
 // ===== DEVICE MANAGEMENT =====
