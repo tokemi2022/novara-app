@@ -922,6 +922,8 @@ async function loadAndShowHome() {
 
 // ===== HOME =====
 function renderHome() {
+  // Always enforce devMode overrides before rendering
+  if (NOVARA.devMode) { session.isPaid = true; session.trialPlanUsed = false; }
   if (!session.child) return;
   const childName = session.child.name;
   const el = n => document.getElementById(n);
@@ -1413,14 +1415,19 @@ function getRequiredSeconds(duration) {
 }
 
 // ── PLAN PERSISTENCE HELPER ──────────────────────────────────────────────
-// Always uses UPDATE with explicit filter — never upsert which can insert
-// a duplicate row if the unique constraint is missing, causing stale loads.
+// Uses delete + insert to guarantee the correct row is always updated,
+// regardless of whether the unique constraint exists in the DB.
 async function savePlanToDB() {
-  await db.update(
-    'weekly_plans',
-    { activities: session.plan },
-    `?child_id=eq.${session.childId}&week_number=eq.${session.weekNumber}`
-  );
+  // Delete ALL rows for this child+week (cleans up any duplicates too)
+  await db.delete('weekly_plans',
+    `?child_id=eq.${session.childId}&week_number=eq.${session.weekNumber}`);
+  // Insert fresh single row with current state
+  await db.insert('weekly_plans', {
+    child_id:    session.childId,
+    week_number: session.weekNumber,
+    age_months:  session.ageMonths,
+    activities:  session.plan,
+  });
 }
 
 function openMilestoneFromActivity(id) {
