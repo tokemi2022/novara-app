@@ -236,7 +236,7 @@ function canSeeFullHistory() { return NOVARA.devMode || session.isPaid; }
 
 function renderTrialBanner() {
   document.querySelectorAll('.trial-banner').forEach(b => b.remove());
-  // Hard enforce devMode every time this runs
+  // Hard enforce devMode — remove any stale overlay
   if (NOVARA.devMode) {
     session.isPaid = true;
     session.trialPlanUsed = false;
@@ -244,8 +244,25 @@ function renderTrialBanner() {
     return;
   }
   if (session.isPaid) return;
-  if (hasUsedTrialPlan()) { showTrialExpiredOverlay(); return; }
 
+  // IMPORTANT: Never show the expired overlay here — only show it when
+  // parent tries to generate a new plan. This allows parents to continue
+  // using the app (milestones, moments, progress) during their trial week.
+  if (hasUsedTrialPlan()) {
+    // Show a gentle informational banner only — no blocking overlay
+    const screens = ['screen-home','screen-plan','screen-progress','screen-moments','screen-settings'];
+    screens.forEach(sid => {
+      const sc = document.getElementById(sid);
+      if (!sc) return;
+      const banner = document.createElement('div');
+      banner.className = 'trial-banner';
+      banner.innerHTML = `<i class="ti ti-crown"></i> Your free week plan is active. <a href="#" onclick="showWaitlistModal()" style="color:#92400E;font-weight:600">Join the waitlist</a> to unlock unlimited weekly plans.`;
+      sc.insertBefore(banner, sc.querySelector('.scroll-area') || sc.firstChild);
+    });
+    return;
+  }
+
+  // Active trial — show encouraging banner
   const screens = ['screen-home','screen-plan','screen-progress','screen-moments','screen-settings'];
   screens.forEach(sid => {
     const sc = document.getElementById(sid);
@@ -1121,7 +1138,11 @@ async function loadAndShowHome() {
 // ===== HOME =====
 function renderHome() {
   // Always enforce devMode overrides before rendering
-  if (NOVARA.devMode) { session.isPaid = true; session.trialPlanUsed = false; }
+  if (NOVARA.devMode) {
+    session.isPaid = true;
+    session.trialPlanUsed = false;
+    document.getElementById('trial-expired-overlay')?.remove();
+  }
   if (!session.child) return;
   const childName = session.child.name;
   const el = n => document.getElementById(n);
@@ -1197,16 +1218,22 @@ async function renderRecentMilestones() {
 let currentActivity = null;
 
 async function generatePlan() {
-  // Trial gate: only allow generating 1 week
-  if (!isTrialActive()) { showTrialExpiredOverlay(); return; }
-
-  // Check if plan already exists and is locked
+  // Check if plan already exists for this week — load it, never block
   const existing = await db.select('weekly_plans',
-    `?child_id=eq.${session.childId}&week_number=eq.${session.weekNumber}`);
+    `?child_id=eq.${session.childId}&week_number=eq.${session.weekNumber}&order=id.desc&limit=1`);
   if (existing?.[0]) {
+    // Plan exists — always load it regardless of trial status
+    // Parents must be able to access their current week plan at all times
     session.plan = existing[0].activities;
     saveSession();
     renderPlan();
+    return;
+  }
+
+  // No existing plan — check if trial allows generating a NEW one
+  if (!NOVARA.devMode && !session.isPaid && hasUsedTrialPlan()) {
+    // Trial plan already used — show upgrade overlay only at point of NEW generation
+    showTrialExpiredOverlay();
     return;
   }
 
