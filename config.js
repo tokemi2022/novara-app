@@ -429,6 +429,12 @@ function setAppLanguage(code) {
   // Set RTL direction for Arabic
   const lang = NOVARA.appLanguages.find(l => l.code === code);
   document.documentElement.dir = lang?.rtl ? 'rtl' : 'ltr';
+  // Translate currently visible screen immediately
+  const activeScreen = document.querySelector('.screen.active');
+  if (activeScreen) {
+    const screenId = activeScreen.id.replace('screen-', '');
+    translateScreen(screenId);
+  }
   applyTranslations();
 }
 

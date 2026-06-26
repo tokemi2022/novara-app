@@ -315,7 +315,150 @@ async function joinWaitlist() {
   }
 }
 
-// ===== WEEK CALCULATION =====
+// ===== SCREEN TRANSLATION =====
+// Rewrites text content of each screen in the current app language
+function translateScreen(id) {
+  const screen = document.getElementById('screen-' + id);
+  if (!screen) return;
+
+  // Helper to set text safely
+  const setText = (sel, key, vars = {}) => {
+    const el = screen.querySelector(sel);
+    if (el) el.textContent = t(key, vars);
+  };
+  const setPlaceholder = (sel, key) => {
+    const el = screen.querySelector(sel);
+    if (el) el.placeholder = t(key);
+  };
+  const setHTML = (sel, html) => {
+    const el = screen.querySelector(sel);
+    if (el) el.innerHTML = html;
+  };
+
+  switch(id) {
+    case 'onboard-child':
+      setText('.onboard-title', 'about_your_child');
+      setText('.onboard-sub', 'child_sub');
+      setPlaceholder('#child-name-input', 'child_name_placeholder');
+      setText('p[style*="shield"]', 'child_name_hint');
+      setText('#child-dob-month option:first-child', 'birth_month');
+      setText('#child-dob-year option:first-child', 'birth_year');
+      setText('.onboard-hint', 'novara_supports');
+      setText('.btn-primary', 'continue_btn');
+      break;
+
+    case 'onboard-parents':
+      setText('.onboard-title', 'who_are_parents');
+      setText('.onboard-sub', 'parents_sub');
+      setPlaceholder('#onboard-parent1', 'parent1_placeholder');
+      setPlaceholder('#onboard-parent2', 'parent2_placeholder');
+      setText('.btn-primary', 'continue_btn');
+      break;
+
+    case 'onboard-pin':
+      setText('.onboard-title', 'create_pin');
+      setText('.onboard-sub', 'pin_sub');
+      setText('.btn-primary', 'continue_btn');
+      break;
+
+    case 'onboard-consent':
+      setText('.onboard-title', 'before_you_begin');
+      setText('.onboard-sub', 'consent_sub');
+      setText('#consent-agree-btn', 'confirm_continue');
+      break;
+
+    case 'onboard-email':
+      setText('.onboard-title', 'your_email');
+      setText('.onboard-sub', 'email_sub');
+      setPlaceholder('#onboard-email-input', 'your_email');
+      setText('#send-code-btn', 'send_code');
+      break;
+
+    case 'onboard-verify':
+      setText('.onboard-title', 'check_email');
+      setText('.onboard-sub', 'verify_sub');
+      setText('.btn-primary', 'verify_btn');
+      setText('.skip-link', 'skip_verify');
+      break;
+
+    case 'onboard-availability':
+      setText('.onboard-title', 'your_availability');
+      setText('.onboard-sub', 'avail_sub');
+      setText('#confirm-avail-btn', 'confirm_continue');
+      break;
+
+    case 'onboard-location':
+      setText('.onboard-title', 'where_are_you');
+      setText('.onboard-sub', 'location_sub');
+      break;
+
+    case 'onboard-languages':
+      setText('.onboard-sub', 'languages_sub');
+      setText('.lang-picker-label:first-of-type', 'at_home');
+      break;
+
+    case 'pin':
+      setText('.pin-title', 'welcome_back');
+      setText('.pin-sub', 'enter_pin');
+      setText('.btn-primary', 'unlock');
+      break;
+
+    case 'home':
+      setText('#home-meta', 'week_of',
+        { age: session.ageMonths, week: session.weekNumber });
+      break;
+
+    case 'plan':
+      setText('.child-name', 'weekly_plan');
+      setText('.btn-primary', 'generate_plan');
+      break;
+
+    case 'progress':
+      setText('.child-name', 'progress_title');
+      setText('.child-meta', 'progress_sub');
+      break;
+
+    case 'moments':
+      setText('.child-name', 'moments_title');
+      setText('.child-meta', 'moments_sub');
+      break;
+
+    case 'chat':
+      setText('.child-name', 'chat_title');
+      setText('.child-meta', 'chat_sub');
+      setPlaceholder('#chat-input', 'type_message');
+      break;
+
+    case 'leaderboard':
+      setText('.child-name', 'ranks_title');
+      setText('.child-meta', 'ranks_sub');
+      setText('.lb-score-info', 'score_formula');
+      break;
+
+    case 'settings':
+      setText('.child-name', 'settings_title');
+      break;
+
+    case 'shopping':
+      setText('.child-name', 'shop_title');
+      setText('.child-meta', 'shop_sub');
+      break;
+  }
+
+  // Also translate nav buttons
+  document.querySelectorAll('.nav-btn').forEach(btn => {
+    const screen_id = btn.getAttribute('data-screen');
+    const keyMap = {
+      home: 'nav_home', plan: 'nav_plan', leaderboard: 'nav_ranks',
+      progress: 'nav_progress', moments: 'nav_moments',
+      chat: 'nav_chat', shopping: 'nav_shop', settings: 'nav_more'
+    };
+    if (keyMap[screen_id]) {
+      const span = btn.querySelector('span');
+      if (span) span.textContent = t(keyMap[screen_id]);
+    }
+  });
+}
 function computeWeek(startDate, dob) {
   const start = new Date(startDate);
   const now = new Date();
@@ -357,6 +500,8 @@ function showScreen(id) {
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   const nb = document.querySelector(`[data-screen="${id}"]`);
   if (nb) nb.classList.add('active');
+  // Apply translations to newly shown screen
+  translateScreen(id);
   if (id === 'home')        { renderHome(); renderTrialBanner(); }
   if (id === 'plan')        renderPlan();
   if (id === 'progress')    renderProgress();
