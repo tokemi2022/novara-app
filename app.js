@@ -315,6 +315,151 @@ async function joinWaitlist() {
   }
 }
 
+// ===== JS-RENDERED ONBOARDING SCREENS =====
+// All screens render from JS so language changes take immediate effect
+
+function renderWelcomeScreen() {
+  const sc = document.getElementById('screen-onboard-welcome');
+  if (!sc) return;
+  sc.querySelector('.onboard-title') && (sc.querySelector('.onboard-title').textContent = t('welcome_title'));
+  sc.querySelector('.onboard-sub') && (sc.querySelector('.onboard-sub').textContent = t('welcome_sub'));
+  const features = sc.querySelectorAll('.onboard-feature span');
+  if (features.length >= 4) {
+    features[0].textContent = t('welcome_feature1');
+    features[1].textContent = t('welcome_feature2');
+    features[2].textContent = t('welcome_feature3');
+    features[3].textContent = t('welcome_feature4');
+  }
+  const trialSpan = sc.querySelector('.trial-info-box span');
+  if (trialSpan) trialSpan.textContent = t('welcome_trial');
+  const btns = sc.querySelectorAll('button');
+  if (btns[0]) btns[0].innerHTML = `${t('get_started')} <i class="ti ti-arrow-right"></i>`;
+  // Change language button
+  const langBtn = sc.querySelector('.btn-secondary:first-of-type');
+  if (langBtn) langBtn.innerHTML = `<i class="ti ti-language"></i> ${t('change_language_btn')}`;
+}
+
+function renderChildScreen() {
+  const sc = document.getElementById('screen-onboard-child');
+  if (!sc) return;
+  sc.querySelector('.onboard-title') && (sc.querySelector('.onboard-title').textContent = t('about_your_child'));
+  sc.querySelector('.onboard-sub') && (sc.querySelector('.onboard-sub').textContent = t('child_sub'));
+  const nameInput = sc.querySelector('#child-name-input');
+  if (nameInput) nameInput.placeholder = t('child_name_placeholder');
+  // Month dropdown
+  const monthSel = sc.querySelector('#child-dob-month');
+  if (monthSel) {
+    const months = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+    monthSel.options[0].text = t('birth_month');
+    months.forEach((m, i) => { if (monthSel.options[i+1]) monthSel.options[i+1].text = t('month_' + m); });
+  }
+  const yearSel = sc.querySelector('#child-dob-year');
+  if (yearSel && yearSel.options[0]) yearSel.options[0].text = t('birth_year');
+  sc.querySelector('.onboard-hint') && (sc.querySelector('.onboard-hint').textContent = t('novara_supports'));
+  sc.querySelector('.btn-primary') && (sc.querySelector('.btn-primary').innerHTML = `${t('continue_btn')} <i class="ti ti-arrow-right"></i>`);
+}
+
+function renderParentsScreen() {
+  const sc = document.getElementById('screen-onboard-parents');
+  if (!sc) return;
+  sc.querySelector('.onboard-title') && (sc.querySelector('.onboard-title').textContent = t('who_are_parents'));
+  sc.querySelector('.onboard-sub') && (sc.querySelector('.onboard-sub').textContent = t('parents_sub'));
+  const p1 = sc.querySelector('#onboard-parent1');
+  if (p1) p1.placeholder = t('parent1_placeholder');
+  const p2 = sc.querySelector('#onboard-parent2');
+  if (p2) p2.placeholder = t('parent2_placeholder');
+  sc.querySelector('.btn-primary') && (sc.querySelector('.btn-primary').innerHTML = `${t('continue_btn')} <i class="ti ti-arrow-right"></i>`);
+}
+
+function renderPinCreateScreen() {
+  const sc = document.getElementById('screen-onboard-pin');
+  if (!sc) return;
+  sc.querySelector('.onboard-title') && (sc.querySelector('.onboard-title').textContent = t('create_pin'));
+  sc.querySelector('.onboard-sub') && (sc.querySelector('.onboard-sub').textContent = t('pin_sub'));
+  sc.querySelector('.btn-primary') && (sc.querySelector('.btn-primary').innerHTML = `${t('continue_btn')} <i class="ti ti-arrow-right"></i>`);
+}
+
+function renderEmailScreen() {
+  const sc = document.getElementById('screen-onboard-email');
+  if (!sc) return;
+  sc.querySelector('.onboard-title') && (sc.querySelector('.onboard-title').textContent = t('your_email'));
+  sc.querySelector('.onboard-sub') && (sc.querySelector('.onboard-sub').textContent = t('email_sub'));
+  const inp = sc.querySelector('#onboard-email-input');
+  if (inp) inp.placeholder = t('your_email');
+  const btn = sc.querySelector('#send-code-btn');
+  if (btn) btn.innerHTML = `${t('send_code')} <i class="ti ti-arrow-right"></i>`;
+}
+
+function renderVerifyScreen() {
+  const sc = document.getElementById('screen-onboard-verify');
+  if (!sc) return;
+  sc.querySelector('.onboard-title') && (sc.querySelector('.onboard-title').textContent = t('check_email'));
+  sc.querySelector('.onboard-sub') && (sc.querySelector('.onboard-sub').textContent = t('verify_sub'));
+  sc.querySelector('.btn-primary') && (sc.querySelector('.btn-primary').innerHTML = `<i class="ti ti-check"></i> ${t('verify_btn')}`);
+  sc.querySelector('.skip-link') && (sc.querySelector('.skip-link').textContent = t('skip_verify'));
+}
+
+function renderPinLoginScreen() {
+  const sc = document.getElementById('screen-pin');
+  if (!sc) return;
+  sc.querySelector('.pin-title') && (sc.querySelector('.pin-title').textContent = t('welcome_back'));
+  sc.querySelector('.pin-sub') && (sc.querySelector('.pin-sub').textContent = t('enter_pin'));
+  sc.querySelector('.btn-primary') && (sc.querySelector('.btn-primary').textContent = t('unlock'));
+  const links = sc.querySelectorAll('.pin-device-link');
+  if (links[1]) links[1].innerHTML = `<i class="ti ti-key"></i> ${t('forgot_pin')}`;
+  if (links[2]) links[2].innerHTML = `<i class="ti ti-language"></i> ${t('language_btn')}`;
+}
+
+function renderConsentScreen() {
+  const sc = document.getElementById('screen-onboard-consent');
+  if (!sc) return;
+  sc.querySelector('.onboard-title') && (sc.querySelector('.onboard-title').textContent = t('before_you_begin'));
+  sc.querySelector('.onboard-sub') && (sc.querySelector('.onboard-sub').textContent = t('consent_sub'));
+  sc.querySelector('.consent-disclaimer') && (sc.querySelector('.consent-disclaimer').textContent = t('consent_disclaimer'));
+  const btn = sc.querySelector('#consent-agree-btn');
+  if (btn) btn.innerHTML = `<i class="ti ti-check"></i> ${t('consent_agree_btn')}`;
+
+  // Rebuild consent items fully in current language
+  const list = sc.querySelector('.consent-list');
+  if (!list) return;
+  list.innerHTML = `
+    <label class="consent-item">
+      <input type="checkbox" id="consent-check-1" onchange="validateConsent()" />
+      <div class="consent-item-text">
+        <div class="consent-eu-label">${t('consent_check1_label')}</div>
+        ${t('consent_check1_text')}
+      </div>
+    </label>
+    <label class="consent-item">
+      <input type="checkbox" id="consent-check-2" onchange="validateConsent()" />
+      <div class="consent-item-text">
+        <div class="consent-eu-label">${t('consent_check2_label')}</div>
+        ${t('consent_check2_text')}
+      </div>
+    </label>
+    <label class="consent-item">
+      <input type="checkbox" id="consent-check-3" onchange="validateConsent()" />
+      <div class="consent-item-text">
+        <div class="consent-eu-label">${t('consent_check3_label')}</div>
+        ${t('consent_check3_text')} <a href="#" onclick="document.getElementById('modal-terms').style.display='flex';return false">${t('consent_terms_link')}</a>
+      </div>
+    </label>
+    <label class="consent-item">
+      <input type="checkbox" id="consent-check-4" onchange="validateConsent()" />
+      <div class="consent-item-text">
+        <div class="consent-eu-label">${t('consent_check4_label')}</div>
+        ${t('consent_check4_text')} <a href="#" onclick="document.getElementById('modal-privacy').style.display='flex';return false">${t('consent_privacy_link')}</a>
+      </div>
+    </label>
+    <label class="consent-item" style="border-color:#E0F7FA">
+      <input type="checkbox" id="consent-check-5" onchange="validateConsent()" />
+      <div class="consent-item-text">
+        <div class="consent-eu-label" style="background:#E0F7FA;color:#0E7490">${t('consent_check5_label')}</div>
+        ${t('consent_check5_text')}
+      </div>
+    </label>`;
+}
+
 // ===== SCREEN TRANSLATION =====
 // Rewrites text content of each screen in the current app language
 function translateScreen(id) {
@@ -510,6 +655,15 @@ function showScreen(id) {
   if (id === 'chat')        renderChatGate();
   if (id === 'shopping')    renderShoppingGate();
   if (id === 'leaderboard') renderLeaderboard();
+  if (id === 'onboard-welcome')      renderWelcomeScreen();
+  if (id === 'onboard-consent')      renderConsentScreen();
+  if (id === 'onboard-availability') renderWeeklyAvailabilityUI();
+  if (id === 'onboard-child')        renderChildScreen();
+  if (id === 'onboard-parents')      renderParentsScreen();
+  if (id === 'onboard-pin')          renderPinCreateScreen();
+  if (id === 'onboard-email')        renderEmailScreen();
+  if (id === 'onboard-verify')       renderVerifyScreen();
+  if (id === 'pin')                  renderPinLoginScreen();
 }
 
 // ===== APP LANGUAGE SELECTION =====
@@ -1199,15 +1353,19 @@ function renderWeeklyAvailabilityUI() {
   }
 
   const days = [
-    { key: 'monday', label: 'Monday' },
-    { key: 'tuesday', label: 'Tuesday' },
-    { key: 'wednesday', label: 'Wednesday' },
-    { key: 'thursday', label: 'Thursday' },
-    { key: 'friday', label: 'Friday' },
-    { key: 'saturday', label: 'Saturday' },
-    { key: 'sunday', label: 'Sunday' },
+    { key: 'monday',    label: t('avail_mon') },
+    { key: 'tuesday',   label: t('avail_tue') },
+    { key: 'wednesday', label: t('avail_wed') },
+    { key: 'thursday',  label: t('avail_thu') },
+    { key: 'friday',    label: t('avail_fri') },
+    { key: 'saturday',  label: t('avail_sat') },
+    { key: 'sunday',    label: t('avail_sun') },
   ];
-  const slots = ['morning','afternoon','evening'];
+  const slots = [
+    { key: 'morning',   label: t('avail_morning') },
+    { key: 'afternoon', label: t('avail_afternoon') },
+    { key: 'evening',   label: t('avail_evening') },
+  ];
 
   el.innerHTML = days.map(day => {
     const d = weekAvailDraft[day.key];
@@ -1221,11 +1379,11 @@ function renderWeeklyAvailabilityUI() {
           </label>
         </div>
         <div class="avail-slot-row ${d.available ? '' : 'avail-hidden'}" id="avail-slots-${day.key}">
-          ${slots.map(slot => `
-            <label class="avail-slot-pill ${d.time_slot === slot ? 'selected' : ''}">
-              <input type="radio" name="slot-${day.key}" value="${slot}" ${d.time_slot === slot ? 'checked' : ''}
-                onchange="selectWeekSlot('${day.key}', '${slot}')" />
-              ${slot.charAt(0).toUpperCase() + slot.slice(1)}
+        ${slots.map(slot => `
+            <label class="avail-slot-pill ${d.time_slot === slot.key ? 'selected' : ''}">
+              <input type="radio" name="slot-${day.key}" value="${slot.key}" ${d.time_slot === slot.key ? 'checked' : ''}
+                onchange="selectWeekSlot('${day.key}', '${slot.key}')" />
+              ${slot.label}
             </label>`).join('')}
         </div>
       </div>`;
