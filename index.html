@@ -74,6 +74,27 @@
     .avail-slot-pill { color: #475569 !important; }
     .avail-slot-pill.selected { color: #0E7490 !important; }
 
+    /* ── APP LANGUAGE PICKER ───────────────────────── */
+    .app-lang-grid {
+      display: flex; flex-direction: column; gap: 8px;
+      width: 100%; margin: 16px 0;
+    }
+    .app-lang-btn {
+      display: flex; align-items: center; gap: 14px;
+      background: white; border: 1.5px solid #E2E8F0;
+      border-radius: 12px; padding: 12px 16px;
+      cursor: pointer; text-align: left; width: 100%;
+      transition: all 0.15s;
+    }
+    .app-lang-btn.selected {
+      border-color: #0E7490; background: #E0F7FA;
+    }
+    .app-lang-flag { font-size: 24px; flex-shrink: 0; }
+    .app-lang-names { flex: 1; }
+    .app-lang-native { font-size: 15px; font-weight: 700; color: #0A2540; }
+    .app-lang-english { font-size: 12px; color: #94A3B8; margin-top: 1px; }
+    .app-lang-check { color: #0E7490; font-size: 18px; flex-shrink: 0; }
+
     /* ── DOB SELECTS ───────────────────────────────── */
     .dob-selects-row { display: flex; flex-direction: column; width: 100%; gap: 0; }
     .dob-select {
@@ -464,6 +485,19 @@
   </div>
 </div>
 
+<!-- ===== ONBOARD: LANGUAGE SELECTION ===== -->
+<div id="screen-onboard-language" class="screen">
+  <div class="onboard-screen" style="padding-bottom:100px">
+    <div class="onboard-icon">🌍</div>
+    <h2 class="onboard-title" style="color:#0A2540">Choose your language</h2>
+    <p class="onboard-sub" style="color:#334155">Select the language you want to use in Novara. / Sélectionnez votre langue. / Selecciona tu idioma.</p>
+    <div id="app-lang-picker" class="app-lang-grid"></div>
+    <button class="btn-primary full-width" style="margin-top:8px" onclick="confirmOnboardLanguage()">
+      <i class="ti ti-arrow-right"></i> Continue · Continuer · Continuar
+    </button>
+  </div>
+</div>
+
 <!-- ===== ONBOARD: WELCOME ===== -->
 <div id="screen-onboard-welcome" class="screen">
   <div class="onboard-screen">
@@ -482,7 +516,7 @@
       <i class="ti ti-gift" style="color:#0E7490"></i>
       <span><strong>14-day free trial</strong> — no payment needed to get started</span>
     </div>
-    <button class="btn-primary full-width" onclick="startOnboarding()">Get started <i class="ti ti-arrow-right"></i></button>
+    <button class="btn-primary full-width" onclick="startLocationStep()">Get started <i class="ti ti-arrow-right"></i></button>
     <div class="join-family-divider">
       <span>Already have an account?</span>
     </div>
@@ -964,6 +998,14 @@
   <div class="scroll-area">
 
     <div class="section">
+      <div class="section-label">App language</div>
+      <div class="settings-card" style="padding:12px 16px">
+        <p style="font-size:13px;color:var(--color-text-secondary);margin-bottom:12px">Choose the language for all menus, buttons and scientific explanations.</p>
+        <div id="settings-lang-picker" class="app-lang-grid"></div>
+      </div>
+    </div>
+
+    <div class="section">
       <div class="section-label">Child profile</div>
       <div class="settings-card">
         <div class="settings-avatar-section">
@@ -1200,7 +1242,7 @@
 </div>
 
 </div>
-<script src="config.js?v=25"></script>
-<script src="app.js?v=25"></script>
+<script src="config.js?v=26"></script>
+<script src="app.js?v=26"></script>
 </body>
 </html>

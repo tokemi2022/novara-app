@@ -17,8 +17,9 @@ let session = {
   isPaid: false,
   trialPlanUsed: false,
   weekAvailability: null,
-  nickname: null,       // ocean-themed family nickname
-  consentAgreed: false, // legal consent confirmed at registration
+  nickname: null,
+  consentAgreed: false,
+  appLang: 'en',
 };
 
 function saveSession() {
@@ -33,7 +34,9 @@ function loadSession() {
     const s = localStorage.getItem(SESSION_KEY);
     if (s) session = { ...session, ...JSON.parse(s), pinVerified: false };
   } catch(e) {}
-  // Apply devMode overrides immediately — never let cached values block dev access
+  // Restore app language
+  if (session.appLang) setAppLanguage(session.appLang);
+  // Apply devMode overrides immediately
   if (NOVARA.devMode) {
     session.isPaid = true;
     session.trialPlanUsed = false;
@@ -345,10 +348,10 @@ function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   const el = document.getElementById('screen-' + id);
   if (el) el.classList.add('active');
-  const noNav = ['splash','pin','onboard-welcome','onboard-location','onboard-child',
-                 'onboard-languages','onboard-parents','onboard-pin','onboard-consent',
-                 'onboard-email','onboard-verify','onboard-availability','join-family',
-                 'pin-reset-email','pin-reset-verify','pin-reset-new'];
+  const noNav = ['splash','pin','onboard-welcome','onboard-language','onboard-location',
+                 'onboard-child','onboard-languages','onboard-parents','onboard-pin',
+                 'onboard-consent','onboard-email','onboard-verify','onboard-availability',
+                 'join-family','pin-reset-email','pin-reset-verify','pin-reset-new'];
   const nav = document.getElementById('bottom-nav');
   if (nav) nav.style.display = noNav.includes(id) ? 'none' : 'flex';
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
@@ -364,7 +367,47 @@ function showScreen(id) {
   if (id === 'leaderboard') renderLeaderboard();
 }
 
-// ===== ONBOARDING =====
+// ===== APP LANGUAGE SELECTION =====
+function renderAppLanguagePicker(containerId, onSelectFn) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  el.innerHTML = NOVARA.appLanguages.map(lang => `
+    <button class="app-lang-btn ${APP_LANG === lang.code ? 'selected' : ''}"
+      onclick="${onSelectFn}('${lang.code}')">
+      <span class="app-lang-flag">${lang.flag}</span>
+      <div class="app-lang-names">
+        <div class="app-lang-native">${lang.native}</div>
+        <div class="app-lang-english">${lang.name}</div>
+      </div>
+      ${APP_LANG === lang.code ? '<i class="ti ti-check app-lang-check"></i>' : ''}
+    </button>`).join('');
+}
+
+function selectOnboardLanguage(code) {
+  setAppLanguage(code);
+  session.appLang = code;
+  // Re-render picker to show selection
+  renderAppLanguagePicker('app-lang-picker', 'selectOnboardLanguage');
+}
+
+async function saveAppLanguageFromSettings(code) {
+  setAppLanguage(code);
+  session.appLang = code;
+  saveSession();
+  // Save to Supabase
+  if (session.familyId) {
+    try {
+      await db.update('families', { app_lang: code }, `?id=eq.${session.familyId}`);
+    } catch(e) { console.warn('Could not save language to DB:', e); }
+  }
+  renderSettings();
+  renderAppLanguagePicker('settings-lang-picker', 'saveAppLanguageFromSettings');
+}
+
+function confirmOnboardLanguage() {
+  saveSession();
+  showScreen('onboard-welcome');
+}
 let onboardData = {
   location: null,
   childName: '',
@@ -374,9 +417,16 @@ let onboardData = {
   parent2: 'Papa',
   pin: '',
   email: '',
+  consentAgreed: false,
+  marketingConsent: false,
 };
 
-async function startOnboarding() {
+function startOnboarding() {
+  showScreen('onboard-language');
+  renderAppLanguagePicker('app-lang-picker', 'selectOnboardLanguage');
+}
+
+async function startLocationStep() {
   showScreen('onboard-location');
   document.getElementById('location-status').textContent = 'Detecting your location…';
   try {
@@ -805,6 +855,7 @@ async function completeOnboarding() {
         nickname,
         consent_agreed_at: new Date().toISOString(),
         consent_version: '1.0',
+        app_lang: APP_LANG,
       });
     } catch(insertErr) {
       if (insertErr.message.includes('23505') || insertErr.message.includes('duplicate')) {
@@ -906,6 +957,8 @@ async function submitPIN() {
     session.trialPlanUsed = NOVARA.devMode ? false : (family.trial_plan_used || false);
     session.nickname = family.nickname || generateNickname();
     session.consentAgreed = !!family.consent_agreed_at;
+    session.appLang = family.app_lang || 'en';
+    setAppLanguage(session.appLang);
     document.getElementById('pin-input').value = '';
     await loadChildData();
 
@@ -1271,6 +1324,9 @@ async function generatePlan() {
   // ── E-commerce localisation by country ──
   const shopLink = getShopLink(country);
 
+  // Language for science proof — use parent's app language name
+  const appLangName = NOVARA.appLanguages.find(l => l.code === APP_LANG)?.name || 'English';
+
   const prompt = `You are a world-class child development expert creating a personalised weekly activity plan.
 
 CHILD PROFILE:
@@ -1287,6 +1343,11 @@ ${devContext}
 PARENT AVAILABILITY THIS WEEK (STRICT — only schedule on these days/slots):
 ${availContext}
 
+IMPORTANT LANGUAGE INSTRUCTION:
+- Activity title, description, tip, resourceSearch: write in ${homeLangs.split(',')[0].trim()} OR English (whichever is more natural for the activity)
+- scienceTitle, scienceProof, ageEvidence: write ENTIRELY in ${appLangName} — this is the parent's chosen app language
+- All other fields: English
+
 Generate exactly 5 activities ONLY on the available days and time slots listed above.
 Match duration to slot: evening = 10-15 mins, morning or afternoon = 20-30 mins.
 
@@ -1301,12 +1362,12 @@ Return ONLY a valid JSON array:
     "description": "Exactly what ${parent1} or ${parent2} does with ${childName} — specific, practical, 2 sentences.",
     "language": "${homeLangs.split(',')[0].trim()}"|"${schoolLangs.split(',')[0].trim()}"|"All",
     "tip": "One tip for tired working parents",
-    "scienceTitle": "Name of the developmental principle — e.g. 'Object Permanence' or 'Bilingual Phonological Awareness'",
-    "scienceProof": "One clear sentence explaining the science — cite a specific framework, theorist or study. e.g. 'Based on Piaget's sensorimotor stage theory, peek-a-boo at 8-12 months directly stimulates object permanence — the understanding that objects exist even when hidden.'",
+    "scienceTitle": "Name of the developmental principle IN ${appLangName}",
+    "scienceProof": "Scientific explanation IN ${appLangName} — cite a specific framework, theorist or study.",
     "scienceFramework": "Piaget"|"Vygotsky"|"WHO Milestones"|"EYFS"|"HighScope"|"Montessori"|"Bowlby Attachment Theory"|"other",
-    "ageEvidence": "One sentence on why this is developmentally appropriate for exactly ${ageMonths} months.",
+    "ageEvidence": "One sentence in ${appLangName} on why this is right for exactly ${ageMonths} months.",
     "resourcePlatform": "YouTube"|"Spotify"|"Google"|"Pinterest"|"BBC CBeebies"|"Khan Academy Kids"|"Duolingo ABC"|"other platform name",
-    "resourceSearch": "exact search terms the parent should type — e.g. 'Yoruba baby songs for 12 months'",
+    "resourceSearch": "exact search terms the parent should type",
     "materials": [{"name": "item", "link": "${shopLink}", "required": true}]
   }
 ]
@@ -1319,9 +1380,7 @@ RULES:
 - Weekend activities use local ${city} venues or parks where relevant
 - Materials links must use: ${shopLink}
 - All activities age-appropriate for ${ageMonths} months
-- scienceProof must cite a real, named developmental framework or theorist
-- ageEvidence must be specific to ${ageMonths} months — not generic
-- resourceSearch must be specific enough that the first result will be genuinely relevant
+- scienceProof, scienceTitle, ageEvidence MUST be in ${appLangName}
 - Never generate URLs — only platform name and search terms`;
 
   try {
@@ -1950,6 +2009,8 @@ async function renderShoppingList() {
 // ===== SETTINGS =====
 function renderSettings() {
   if (!session.child) return;
+  // Render language picker
+  renderAppLanguagePicker('settings-lang-picker', 'saveAppLanguageFromSettings');
   const el = n => document.getElementById(n);
   const avatarWrap = el('settings-avatar-wrap');
   if (avatarWrap) {
