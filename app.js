@@ -333,7 +333,10 @@ function renderWelcomeScreen() {
   const trialSpan = sc.querySelector('.trial-info-box span');
   if (trialSpan) trialSpan.textContent = t('welcome_trial');
   const btns = sc.querySelectorAll('button');
-  if (btns[0]) btns[0].innerHTML = `${t('get_started')} <i class="ti ti-arrow-right"></i>`;
+  if (btns[0]) {
+    btns[0].innerHTML = `${t('get_started')} <i class="ti ti-arrow-right"></i>`;
+    btns[0].onclick = startLocationStep;
+  }
   // Change language button
   const langBtn = sc.querySelector('.btn-secondary:first-of-type');
   if (langBtn) langBtn.innerHTML = `<i class="ti ti-language"></i> ${t('change_language_btn')}`;
@@ -722,7 +725,7 @@ async function saveAppLanguageFromSettings(code) {
 
 function confirmOnboardLanguage() {
   saveSession();
-  startLocationStep();
+  showScreen('onboard-welcome');
 }
 let onboardData = {
   location: null,
