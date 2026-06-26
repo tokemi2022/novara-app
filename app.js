@@ -383,6 +383,23 @@ function renderAppLanguagePicker(containerId, onSelectFn) {
     </button>`).join('');
 }
 
+function openLangModal() {
+  const modal = document.getElementById('modal-lang-quick');
+  if (modal) modal.style.display = 'flex';
+  renderAppLanguagePicker('modal-lang-picker', 'quickChangeLang');
+}
+
+function quickChangeLang(code) {
+  setAppLanguage(code);
+  session.appLang = code;
+  saveSession();
+  if (session.familyId) {
+    db.update('families', { app_lang: code }, `?id=eq.${session.familyId}`).catch(() => {});
+  }
+  renderAppLanguagePicker('modal-lang-picker', 'quickChangeLang');
+  renderAppLanguagePicker('settings-lang-picker', 'saveAppLanguageFromSettings');
+}
+
 function selectOnboardLanguage(code) {
   setAppLanguage(code);
   session.appLang = code;
@@ -406,7 +423,7 @@ async function saveAppLanguageFromSettings(code) {
 
 function confirmOnboardLanguage() {
   saveSession();
-  showScreen('onboard-welcome');
+  startLocationStep();
 }
 let onboardData = {
   location: null,
