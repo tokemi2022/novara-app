@@ -383,13 +383,29 @@ async function startOnboarding() {
   }
 }
 
-function confirmLocation() { showScreen('onboard-child'); }
+function populateBirthYears() {
+  const sel = document.getElementById('child-dob-year');
+  if (!sel || sel.options.length > 1) return; // already populated
+  const currentYear = new Date().getFullYear();
+  for (let y = currentYear; y >= currentYear - 5; y--) {
+    const opt = document.createElement('option');
+    opt.value = y;
+    opt.textContent = y;
+    sel.appendChild(opt);
+  }
+}
+
+function confirmLocation() {
+  populateBirthYears();
+  showScreen('onboard-child');
+}
 
 function saveManualLocation() {
   const city = document.getElementById('manual-city').value.trim();
   const country = document.getElementById('manual-country').value.trim();
   if (!city || !country) { alert('Please enter your city and country'); return; }
   onboardData.location = { city, country, country_code: '', latitude: null, longitude: null };
+  populateBirthYears();
   showScreen('onboard-child');
 }
 
