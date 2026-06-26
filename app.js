@@ -330,7 +330,8 @@ function showScreen(id) {
   if (el) el.classList.add('active');
   const noNav = ['splash','pin','onboard-welcome','onboard-location','onboard-child',
                  'onboard-languages','onboard-parents','onboard-pin','onboard-consent',
-                 'onboard-email','onboard-verify','onboard-availability','join-family'];
+                 'onboard-email','onboard-verify','onboard-availability','join-family',
+                 'pin-reset-email','pin-reset-verify','pin-reset-new'];
   const nav = document.getElementById('bottom-nav');
   if (nav) nav.style.display = noNav.includes(id) ? 'none' : 'flex';
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
@@ -394,12 +395,15 @@ function saveManualLocation() {
 
 function saveChildDetails() {
   const name = document.getElementById('child-name-input').value.trim();
-  const dob = document.getElementById('child-dob-input').value;
-  if (!name) { alert('Please enter your child\'s name'); return; }
-  if (!dob) { alert('Please enter your child\'s date of birth'); return; }
+  const month = document.getElementById('child-dob-month').value;
+  const year  = document.getElementById('child-dob-year').value;
+  if (!name) { alert('Please enter your child\'s name or nickname'); return; }
+  if (!month || !year) { alert('Please select your child\'s birth month and year'); return; }
+  // Use 1st of month internally — we only need month+year for age calculation
+  const dob = `${year}-${month.padStart(2,'0')}-01`;
   const dobDate = new Date(dob);
   const now = new Date();
-  if (dobDate > now) { alert('Date of birth cannot be in the future'); return; }
+  if (dobDate > now) { alert('Birth date cannot be in the future'); return; }
   const ageMonths = Math.floor((now - dobDate) / (1000 * 60 * 60 * 24 * 30.44));
   if (ageMonths > 48) { alert('Novara currently supports children up to 48 months (4 years)'); return; }
   onboardData.childName = name;
@@ -473,19 +477,23 @@ function validateConsent() {
   const c1 = document.getElementById('consent-check-1')?.checked;
   const c2 = document.getElementById('consent-check-2')?.checked;
   const c3 = document.getElementById('consent-check-3')?.checked;
+  const c4 = document.getElementById('consent-check-4')?.checked;
+  // c5 (marketing) is optional — not required to enable button
   const btn = document.getElementById('consent-agree-btn');
-  if (btn) btn.disabled = !(c1 && c2 && c3);
+  if (btn) btn.disabled = !(c1 && c2 && c3 && c4);
 }
 
 function proceedFromConsent() {
   const c1 = document.getElementById('consent-check-1')?.checked;
   const c2 = document.getElementById('consent-check-2')?.checked;
   const c3 = document.getElementById('consent-check-3')?.checked;
-  if (!c1 || !c2 || !c3) {
-    alert('Please agree to all terms before continuing.');
+  const c4 = document.getElementById('consent-check-4')?.checked;
+  if (!c1 || !c2 || !c3 || !c4) {
+    alert('Please agree to all required terms before continuing.');
     return;
   }
   onboardData.consentAgreed = true;
+  onboardData.marketingConsent = document.getElementById('consent-check-5')?.checked || false;
   showScreen('onboard-email');
 }
 
@@ -666,6 +674,81 @@ async function joinFamilyAccount() {
 
 function showJoinError(msg) {
   const el = document.getElementById('join-error');
+  if (el) { el.textContent = msg; el.style.display = 'block'; }
+}
+
+// ===== PIN RESET FLOW =====
+async function sendPinResetCode() {
+  const email = document.getElementById('reset-email-input')?.value.trim();
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    showResetError('Please enter a valid email address.'); return;
+  }
+  // Check email exists in families
+  const families = await db.select('families', `?email=eq.${encodeURIComponent(email)}`);
+  if (!families || families.length === 0) {
+    showResetError('No Novara account found with that email address.'); return;
+  }
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  const expires = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+  localStorage.setItem('novara_reset_email', email);
+  localStorage.setItem('novara_reset_code', code);
+  localStorage.setItem('novara_reset_expires', expires);
+
+  // Send via Worker (best effort — Resend pending)
+  try {
+    await fetch(NOVARA.workerUrl + 'email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'reset', to: email, code })
+    });
+  } catch(e) { console.warn('Reset email send failed (non-blocking):', e); }
+
+  showScreen('pin-reset-verify');
+  document.getElementById('reset-email-display').textContent = email;
+}
+
+async function verifyResetCode() {
+  const entered  = document.getElementById('reset-code-input')?.value.trim();
+  const stored   = localStorage.getItem('novara_reset_code');
+  const expires  = localStorage.getItem('novara_reset_expires');
+  const email    = localStorage.getItem('novara_reset_email');
+  if (!stored || new Date() > new Date(expires)) {
+    showResetVerifyError('Code expired. Please go back and request a new one.'); return;
+  }
+  if (entered !== stored) {
+    showResetVerifyError('Incorrect code. Please try again.'); return;
+  }
+  localStorage.removeItem('novara_reset_code');
+  localStorage.removeItem('novara_reset_expires');
+  showScreen('pin-reset-new');
+}
+
+async function saveNewPin() {
+  const p1    = document.getElementById('reset-pin-new')?.value;
+  const p2    = document.getElementById('reset-pin-confirm')?.value;
+  const email = localStorage.getItem('novara_reset_email');
+  if (!p1 || p1.length !== 4 || !/^\d{4}$/.test(p1)) {
+    showResetNewError('PIN must be exactly 4 digits.'); return;
+  }
+  if (p1 !== p2) { showResetNewError('PINs do not match.'); return; }
+  try {
+    await db.update('families', { pin_hash: p1 }, `?email=eq.${encodeURIComponent(email)}`);
+    localStorage.removeItem('novara_reset_email');
+    alert('PIN updated successfully! Please log in with your new PIN.');
+    showScreen('onboard-welcome');
+  } catch(e) { showResetNewError('Error: ' + e.message); }
+}
+
+function showResetError(msg) {
+  const el = document.getElementById('reset-error');
+  if (el) { el.textContent = msg; el.style.display = 'block'; }
+}
+function showResetVerifyError(msg) {
+  const el = document.getElementById('reset-verify-error');
+  if (el) { el.textContent = msg; el.style.display = 'block'; }
+}
+function showResetNewError(msg) {
+  const el = document.getElementById('reset-new-error');
   if (el) { el.textContent = msg; el.style.display = 'block'; }
 }
 
@@ -1175,8 +1258,12 @@ Return ONLY a valid JSON array:
     "description": "Exactly what ${parent1} or ${parent2} does with ${childName} — specific, practical, 2 sentences.",
     "language": "${homeLangs.split(',')[0].trim()}"|"${schoolLangs.split(',')[0].trim()}"|"All",
     "tip": "One tip for tired working parents",
+    "scienceTitle": "Name of the developmental principle — e.g. 'Object Permanence' or 'Bilingual Phonological Awareness'",
+    "scienceProof": "One clear sentence explaining the science — cite a specific framework, theorist or study. e.g. 'Based on Piaget's sensorimotor stage theory, peek-a-boo at 8-12 months directly stimulates object permanence — the understanding that objects exist even when hidden.'",
+    "scienceFramework": "Piaget"|"Vygotsky"|"WHO Milestones"|"EYFS"|"HighScope"|"Montessori"|"Bowlby Attachment Theory"|"other",
+    "ageEvidence": "One sentence on why this is developmentally appropriate for exactly ${ageMonths} months.",
     "resourcePlatform": "YouTube"|"Spotify"|"Google"|"Pinterest"|"BBC CBeebies"|"Khan Academy Kids"|"Duolingo ABC"|"other platform name",
-    "resourceSearch": "exact search terms the parent should type to find supporting content — e.g. 'Yoruba baby songs for 12 months'",
+    "resourceSearch": "exact search terms the parent should type — e.g. 'Yoruba baby songs for 12 months'",
     "materials": [{"name": "item", "link": "${shopLink}", "required": true}]
   }
 ]
@@ -1189,6 +1276,8 @@ RULES:
 - Weekend activities use local ${city} venues or parks where relevant
 - Materials links must use: ${shopLink}
 - All activities age-appropriate for ${ageMonths} months
+- scienceProof must cite a real, named developmental framework or theorist
+- ageEvidence must be specific to ${ageMonths} months — not generic
 - resourceSearch must be specific enough that the first result will be genuinely relevant
 - Never generate URLs — only platform name and search terms`;
 
@@ -1387,6 +1476,16 @@ function openActivity(id) {
     <div class="act-detail-section"><h4>What to do</h4><p>${act.description}</p></div>
     <div class="act-detail-section"><h4>Parent tip</h4><p>${act.tip || 'Follow their lead and keep it joyful!'}</p></div>
     <div class="act-detail-section"><h4>Domain</h4><span class="tag" style="background:${dom?.bg};color:${dom?.color};font-size:13px;padding:4px 12px">${dom?.name}</span></div>
+    ${act.scienceTitle ? `
+    <div class="act-detail-section">
+      <h4>🔬 Why this works</h4>
+      <div class="act-science-card">
+        <div class="act-science-title">${act.scienceTitle}</div>
+        <div class="act-science-proof">${act.scienceProof}</div>
+        ${act.ageEvidence ? `<div class="act-science-age"><i class="ti ti-calendar"></i> ${act.ageEvidence}</div>` : ''}
+        ${act.scienceFramework ? `<div class="act-science-badge">${act.scienceFramework}</div>` : ''}
+      </div>
+    </div>` : ''}
     ${act.resourcePlatform ? `
     <div class="act-detail-section">
       <h4>Where to find supporting content</h4>

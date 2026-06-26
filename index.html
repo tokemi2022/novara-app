@@ -74,6 +74,34 @@
     .avail-slot-pill { color: #475569 !important; }
     .avail-slot-pill.selected { color: #0E7490 !important; }
 
+    /* ── DOB SELECTS ───────────────────────────────── */
+    .dob-selects-row { display: flex; flex-direction: column; width: 100%; gap: 0; }
+    .dob-select {
+      background: #FFFFFF !important; border: 1.5px solid #0E7490 !important;
+      color: #0A2540 !important; appearance: auto;
+    }
+
+    /* ── SCIENCE PROOF CARD ────────────────────────── */
+    .act-science-card {
+      background: linear-gradient(135deg,#F0FDF4,#E0F7FA);
+      border: 1px solid #A7F3D0; border-radius: 12px; padding: 14px;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .act-science-title {
+      font-size: 14px; font-weight: 700; color: #065F46;
+    }
+    .act-science-proof {
+      font-size: 13px; color: #334155; line-height: 1.6; font-style: italic;
+    }
+    .act-science-age {
+      font-size: 12px; color: #0E7490; display: flex; align-items: center; gap: 6px;
+    }
+    .act-science-badge {
+      display: inline-block; font-size: 11px; font-weight: 600;
+      background: #0E7490; color: white;
+      border-radius: 20px; padding: 2px 10px; align-self: flex-start;
+    }
+
     /* ── ACTIVITY RESOURCE SUGGESTION ─────────────── */
     .act-resource-suggestion {
       background: #F8FAFC; border: 1px solid #E2E8F0;
@@ -170,6 +198,12 @@
     }
     .consent-item-text { font-size: 13px; color: #334155; line-height: 1.5; }
     .consent-item-text a { color: #0E7490; font-weight: 600; }
+    .consent-eu-label {
+      display: inline-block; font-size: 10px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.5px;
+      background: #0A2540; color: white;
+      border-radius: 4px; padding: 2px 8px; margin-bottom: 6px;
+    }
     .consent-disclaimer {
       font-size: 12px; color: #94A3B8; text-align: center;
       line-height: 1.6; padding: 0 8px; margin-bottom: 16px;
@@ -363,6 +397,26 @@
       background: none; border: none; cursor: pointer; margin-top: 12px;
     }
 
+    /* ── PIN RESET SCREENS ─────────────────────────── */
+    #screen-pin-reset-email .onboard-input,
+    #screen-pin-reset-verify .onboard-input,
+    #screen-pin-reset-new .onboard-input {
+      background: #FFFFFF !important;
+      border: 1.5px solid #0E7490 !important;
+      color: #0A2540 !important;
+    }
+    #screen-pin-reset-email .onboard-input::placeholder,
+    #screen-pin-reset-verify .onboard-input::placeholder,
+    #screen-pin-reset-new .onboard-input::placeholder {
+      color: #94A3B8 !important;
+    }
+    #screen-pin-reset-email .onboard-title,
+    #screen-pin-reset-verify .onboard-title,
+    #screen-pin-reset-new .onboard-title,
+    #screen-pin-reset-email .onboard-sub,
+    #screen-pin-reset-verify .onboard-sub,
+    #screen-pin-reset-new .onboard-sub { color: #0A2540 !important; }
+
     /* ── JOIN FAMILY ───────────────────────────────── */
     .join-family-divider {
       display: flex; align-items: center; gap: 12px;
@@ -481,12 +535,39 @@
 <!-- ===== ONBOARD: CHILD ===== -->
 <div id="screen-onboard-child" class="screen">
   <div class="onboard-screen">
-    <div class="onboard-step">Step 2 of 6</div>
+    <div class="onboard-step">Step 2 of 7</div>
     <div class="onboard-icon">👶</div>
     <h2 class="onboard-title">Tell us about your child</h2>
-    <p class="onboard-sub">We use their date of birth to know exactly where to start the developmental journey.</p>
-    <input id="child-name-input" type="text" placeholder="Child's name" class="onboard-input" />
-    <input id="child-dob-input" type="date" class="onboard-input" style="margin-top:8px" />
+    <p class="onboard-sub">We use their birth month and year to personalise their developmental journey.</p>
+    <input id="child-name-input" type="text" placeholder="First name or nickname (e.g. Amara, Tolu, Baby J)" class="onboard-input" />
+    <p style="font-size:12px;color:#64748B;margin:-4px 0 10px;text-align:left;padding:0 2px">
+      <i class="ti ti-shield-check" style="color:#0E7490"></i> First name or nickname only — no surnames for your child's privacy
+    </p>
+    <div class="dob-selects-row">
+      <select id="child-dob-month" class="onboard-input dob-select">
+        <option value="">Birth month</option>
+        <option value="01">January</option>
+        <option value="02">February</option>
+        <option value="03">March</option>
+        <option value="04">April</option>
+        <option value="05">May</option>
+        <option value="06">June</option>
+        <option value="07">July</option>
+        <option value="08">August</option>
+        <option value="09">September</option>
+        <option value="10">October</option>
+        <option value="11">November</option>
+        <option value="12">December</option>
+      </select>
+      <select id="child-dob-year" class="onboard-input dob-select" style="margin-top:8px">
+        <option value="">Birth year</option>
+        <option value="2025">2025</option>
+        <option value="2024">2024</option>
+        <option value="2023">2023</option>
+        <option value="2022">2022</option>
+        <option value="2021">2021</option>
+      </select>
+    </div>
     <p class="onboard-hint">Novara supports children from birth to 4 years old.</p>
     <button class="btn-primary full-width" style="margin-top:16px" onclick="saveChildDetails()">Continue <i class="ti ti-arrow-right"></i></button>
   </div>
@@ -541,34 +622,110 @@
 
 <!-- ===== ONBOARD: CONSENT (Step 6) ===== -->
 <div id="screen-onboard-consent" class="screen">
-  <div class="onboard-screen">
+  <div class="onboard-screen" style="padding-bottom:100px">
     <div class="onboard-step">Step 6 of 7</div>
     <div class="onboard-icon">📋</div>
     <h2 class="onboard-title" style="color:#0A2540">Before you begin</h2>
-    <p class="onboard-sub" style="color:#334155">Novara is built to support your child's development journey. Please read and confirm the following.</p>
+    <p class="onboard-sub" style="color:#334155">Please read and confirm each item below to continue.</p>
     <div class="consent-list">
+
       <label class="consent-item">
         <input type="checkbox" id="consent-check-1" onchange="validateConsent()" />
         <div class="consent-item-text">
-          I confirm I am the <strong>parent or legal guardian</strong> of the child being registered, and I have the right to provide their information on this platform.
+          <div class="consent-eu-label">Identity &amp; Parental Responsibility</div>
+          I confirm I am the <strong>parent or legal guardian</strong> of the child being registered and have the right to provide their information on this platform.
         </div>
       </label>
+
       <label class="consent-item">
         <input type="checkbox" id="consent-check-2" onchange="validateConsent()" />
         <div class="consent-item-text">
-          I understand that Novara provides <strong>developmental activity suggestions only</strong> and is not a substitute for medical, clinical, or professional paediatric advice. I will consult a qualified professional for any health concerns.
+          <div class="consent-eu-label">Scope of Service — Not Medical Advice</div>
+          I understand Novara provides <strong>developmental activity suggestions only</strong> and is not a substitute for medical, clinical, or professional paediatric advice. I will consult a qualified professional for any health concerns.
         </div>
       </label>
+
       <label class="consent-item">
         <input type="checkbox" id="consent-check-3" onchange="validateConsent()" />
         <div class="consent-item-text">
-          I have read and agree to Novara's <a href="#" onclick="document.getElementById('modal-terms').style.display='flex';return false">Terms &amp; Conditions</a> and <a href="#" onclick="document.getElementById('modal-privacy').style.display='flex';return false">Privacy Policy</a>, including how my family's data is stored and used.
+          <div class="consent-eu-label">Contractual Basis — GDPR Art. 6(1)(b)</div>
+          I have read and agree to Novara's <a href="#" onclick="document.getElementById('modal-terms').style.display='flex';return false">Terms &amp; Conditions</a> governing the provision of this service.
         </div>
       </label>
+
+      <label class="consent-item">
+        <input type="checkbox" id="consent-check-4" onchange="validateConsent()" />
+        <div class="consent-item-text">
+          <div class="consent-eu-label">Consent to Data Processing — GDPR Art. 6(1)(a)</div>
+          I have read and agree to Novara's <a href="#" onclick="document.getElementById('modal-privacy').style.display='flex';return false">Privacy Policy</a> and consent to my family's data being processed to personalise my child's developmental plan.
+        </div>
+      </label>
+
+      <label class="consent-item" style="border-color:#E0F7FA">
+        <input type="checkbox" id="consent-check-5" onchange="validateConsent()" />
+        <div class="consent-item-text">
+          <div class="consent-eu-label" style="background:#E0F7FA;color:#0E7490">Legitimate Interest — GDPR Art. 6(1)(f) · Optional</div>
+          I agree to receive Novara updates, product news, and early access offers by email. I can unsubscribe at any time.
+        </div>
+      </label>
+
     </div>
-    <p class="consent-disclaimer">Your data is stored securely. You can request full deletion at any time from Settings. We never sell your data or share it with third parties.</p>
+    <p class="consent-disclaimer">Your data is stored securely in the EU. You can request full deletion at any time. We never sell your data.</p>
     <button id="consent-agree-btn" class="btn-primary full-width" disabled onclick="proceedFromConsent()">
       <i class="ti ti-check"></i> I agree — continue
+    </button>
+  </div>
+</div>
+
+<!-- ===== PIN RESET: EMAIL ===== -->
+<div id="screen-pin-reset-email" class="screen">
+  <div class="onboard-screen">
+    <div class="onboard-icon">🔑</div>
+    <h2 class="onboard-title" style="color:#0A2540">Reset your PIN</h2>
+    <p class="onboard-sub" style="color:#334155">Enter the email address you registered with and we'll send you a reset code.</p>
+    <input id="reset-email-input" type="email" placeholder="📧 Your registered email address" class="onboard-input" />
+    <p id="reset-error" class="pin-error" style="display:none"></p>
+    <button class="btn-primary full-width" style="margin-top:16px" onclick="sendPinResetCode()">
+      <i class="ti ti-send"></i> Send reset code
+    </button>
+    <button class="btn-secondary full-width" style="margin-top:8px" onclick="showScreen('onboard-welcome')">
+      <i class="ti ti-arrow-left"></i> Back
+    </button>
+  </div>
+</div>
+
+<!-- ===== PIN RESET: VERIFY CODE ===== -->
+<div id="screen-pin-reset-verify" class="screen">
+  <div class="onboard-screen">
+    <div class="onboard-icon">📬</div>
+    <h2 class="onboard-title" style="color:#0A2540">Enter reset code</h2>
+    <p class="onboard-sub" style="color:#334155">We sent a 6-digit code to:</p>
+    <span id="reset-email-display" class="verify-display"></span>
+    <input id="reset-code-input" type="text" inputmode="numeric" maxlength="6"
+      placeholder="6-digit code" class="onboard-input verify-code-input" />
+    <p id="reset-verify-error" class="pin-error" style="display:none"></p>
+    <button class="btn-primary full-width" style="margin-top:16px" onclick="verifyResetCode()">
+      <i class="ti ti-check"></i> Verify code
+    </button>
+    <button class="btn-secondary full-width" style="margin-top:8px" onclick="showScreen('pin-reset-email')">
+      <i class="ti ti-arrow-left"></i> Back
+    </button>
+  </div>
+</div>
+
+<!-- ===== PIN RESET: NEW PIN ===== -->
+<div id="screen-pin-reset-new" class="screen">
+  <div class="onboard-screen">
+    <div class="onboard-icon">🔐</div>
+    <h2 class="onboard-title" style="color:#0A2540">Set a new PIN</h2>
+    <p class="onboard-sub" style="color:#334155">Choose a new 4-digit PIN for your family account.</p>
+    <input id="reset-pin-new" type="password" inputmode="numeric" maxlength="4"
+      placeholder="New 4-digit PIN" class="onboard-input pin-style" />
+    <input id="reset-pin-confirm" type="password" inputmode="numeric" maxlength="4"
+      placeholder="Confirm new PIN" class="onboard-input pin-style" style="margin-top:8px" />
+    <p id="reset-new-error" class="pin-error" style="display:none"></p>
+    <button class="btn-primary full-width" style="margin-top:16px" onclick="saveNewPin()">
+      <i class="ti ti-check"></i> Save new PIN
     </button>
   </div>
 </div>
@@ -629,6 +786,10 @@
     <div class="pin-device-actions">
       <button class="pin-device-link" onclick="document.getElementById('modal-device-limit').style.display='flex'">
         <i class="ti ti-device-mobile"></i> Manage devices
+      </button>
+      &nbsp;·&nbsp;
+      <button class="pin-device-link" onclick="showScreen('pin-reset-email')">
+        <i class="ti ti-key"></i> Forgot PIN?
       </button>
     </div>
   </div>
@@ -1044,7 +1205,7 @@
 </div>
 
 </div>
-<script src="config.js?v=21"></script>
-<script src="app.js?v=21"></script>
+<script src="config.js?v=22"></script>
+<script src="app.js?v=22"></script>
 </body>
 </html>
