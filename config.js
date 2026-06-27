@@ -198,6 +198,8 @@ const TRANSLATIONS = {
     language_btn: 'Language',
     not_your_account: 'Not your account?',
   },
+
+  es: {
     nav_home: 'Inicio', nav_plan: 'Plan', nav_ranks: 'Ranking',
     nav_progress: 'Progreso', nav_moments: 'Momentos',
     nav_chat: 'Chat', nav_shop: 'Tienda', nav_more: 'Más',
